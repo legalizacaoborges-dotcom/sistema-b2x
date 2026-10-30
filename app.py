@@ -582,4 +582,162 @@ elif menu == "Busca Integrada (Lupa 360°)":
             st.markdown(f"##### 📌 Processos Mãe e Subprocessos ({len(procs_mae_cli)})")
             
             for pmc in procs_mae_cli:
-                st.info(f"**Processo Mãe:** {pmc['numero_processo_mae']} | **Empreendimento
+                st.info(f"**Processo Mãe:** {pmc['numero_processo_mae']} | **Empreendimento:** {pmc['endereco_empreendimento']} | **Status:** `{pmc['status']}`")
+                subs_cli = [s for s in st.session_state.subprocessos if s["processo_mae_id"] == pmc["id"]]
+                for sc in subs_cli:
+                    st.write(f" └─ **Subprocesso ({sc['orgao_subprocesso']}):** {sc['numero_subprocesso']} — Status: `{sc['status']}`")
+
+            st.divider()
+
+            financeiro_cliente = [f for f in st.session_state.financeiro if f["cliente_id"] == cliente_obj["id"]]
+            st.markdown(f"##### 💰 Histórico Financeiro ({len(financeiro_cliente)})")
+            
+            if financeiro_cliente:
+                df_fin_cli = pd.DataFrame(financeiro_cliente)
+                st.dataframe(
+                    df_fin_cli[["tipo_documento", "numero_documento", "descricao", "valor", "vencimento", "pagador", "status_pagamento"]],
+                    use_container_width=True
+                )
+
+# ------------------------------------------------------------------------------
+# 7. MÓDULO FINANCEIRO (MARIANA)
+# ------------------------------------------------------------------------------
+elif menu == "Módulo Financeiro (Mariana)":
+    st.subheader("Módulo Financeiro - Controle de Taxas, RRT/ART e Boletos")
+    
+    tab_fin1, tab_fin2 = st.columns([2, 1])
+    
+    with tab_fin2:
+        st.markdown("##### Novo Lançamento Financeiro")
+        with st.form("form_novo_financeiro"):
+            cli_fin_nome = st.selectbox("Cliente", [c["nome_razao"] for c in st.session_state.clientes] if st.session_state.clientes else ["Nenhum"])
+            
+            cli_id_sel = next((c["id"] for c in st.session_state.clientes if c["nome_razao"] == cli_fin_nome), 1)
+            procs_mae_opcoes = [p["numero_processo_mae"] for p in st.session_state.processos_mae if p["cliente_id"] == cli_id_sel]
+            
+            proc_mae_fin = st.selectbox("Processo Mãe Relacionado", procs_mae_opcoes if procs_mae_opcoes else ["Nenhum"])
+            
+            tipo_doc = st.selectbox("Tipo de Encargo", ["DARM / Taxa Municipal", "RRT (CAU)", "ART (CREA)", "Boleto Cartório / RGI", "Honorários / Outros"])
+            num_doc = st.text_input("Número do Boleto / RRT / ART / DARM")
+            desc_fin = st.text_input("Descrição da Taxa")
+            val_fin = st.number_input("Valor (R$)", min_value=0.0, value=0.0, step=10.0)
+            venc_fin = st.date_input("Data de Vencimento")
+            pagador_fin = st.selectbox("Responsável pelo Pagamento", ["B2x (A Reembolsar)", "Cliente Direto"])
+            
+            uploaded_file = st.file_uploader("Anexar Comprovante / Guia (PDF)", type=["pdf", "png", "jpg"])
+            
+            btn_add_fin = st.form_submit_button("Lançar no Financeiro na Nuvem")
+            if btn_add_fin:
+                novo_id_fin = max([f["id"] for f in st.session_state.financeiro], default=0) + 1
+                st.session_state.financeiro.append({
+                    "id": novo_id_fin,
+                    "processo_mae_id": 1,
+                    "subprocesso_id": None,
+                    "cliente_id": cli_id_sel,
+                    "tipo_documento": tipo_doc,
+                    "numero_documento": num_doc,
+                    "descricao": desc_fin,
+                    "valor": val_fin,
+                    "vencimento": venc_fin,
+                    "pagador": pagador_fin,
+                    "status_pagamento": "Pendente",
+                    "nota_fiscal_emitida": "Não",
+                    "comprovante_anexado": uploaded_file.name if uploaded_file else None
+                })
+                salvar_dados(pd.DataFrame(st.session_state.financeiro), "Financeiro")
+                st.success("Lançamento financeiro registrado na nuvem com sucesso!")
+                st.rerun()
+
+    with tab_fin1:
+        st.markdown("##### Painel de Controle de Contas e Taxas")
+        if st.session_state.financeiro:
+            for item in list(st.session_state.financeiro):
+                with st.expander(f"💰 {item['tipo_documento']} — R$ {item['valor']:,.2f} | Vencimento: {item['vencimento'].strftime('%d/%m/%Y')} ({item['status_pagamento']})"):
+                    st.write(f"**Nº Documento:** {item['numero_documento']} | **Pagador:** {item['pagador']}")
+                    st.write(f"**Descrição:** {item['descricao']}")
+                    
+                    c_btn1, c_btn2 = st.columns(2)
+                    with c_btn1:
+                        if st.button("Marcar como Pago", key=f"btn_pago_{item['id']}"):
+                            item['status_pagamento'] = "Pago / Quitado"
+                            salvar_dados(pd.DataFrame(st.session_state.financeiro), "Financeiro")
+                            st.success("Status atualizado na nuvem!")
+                            st.rerun()
+                    with c_btn2:
+                        if st.button("🗑️ Excluir Lançamento", key=f"btn_del_fin_{item['id']}"):
+                            st.session_state.financeiro = [f for f in st.session_state.financeiro if f['id'] != item['id']]
+                            salvar_dados(pd.DataFrame(st.session_state.financeiro), "Financeiro")
+                            st.success("Lançamento excluído da nuvem!")
+                            st.rerun()
+        else:
+            st.info("Nenhum encargo financeiro registrado.")
+
+# ------------------------------------------------------------------------------
+# 8. GESTÃO DE ÓRGÃOS
+# ------------------------------------------------------------------------------
+elif menu == "Gestão de Órgãos":
+    st.subheader("Cadastro de Órgãos e Autarquias")
+    col_o1, col_o2 = st.columns([2, 1])
+    with col_o1:
+        for org in list(st.session_state.lista_orgaos):
+            c_org1, c_org2 = st.columns([4, 1])
+            with c_org1:
+                st.write(f"🏛️ **{org}**")
+            with c_org2:
+                if st.button("Excluir", key=f"del_org_{org}"):
+                    st.session_state.lista_orgaos.remove(org)
+                    st.rerun()
+    with col_o2:
+        with st.form("form_novo_orgao"):
+            novo_o = st.text_input("Nome do Órgão")
+            if st.form_submit_button("Cadastrar"):
+                if novo_o.strip():
+                    st.session_state.lista_orgaos.append(novo_o.strip())
+                    st.rerun()
+
+# ------------------------------------------------------------------------------
+# 9. GESTÃO DA EQUIPE
+# ------------------------------------------------------------------------------
+elif menu == "Gestão da Equipe":
+    st.subheader("Gerenciamento de Funcionários")
+    col_eq1, col_eq2 = st.columns([2, 1])
+    with col_eq1:
+        for nome_f, cargo_f in list(st.session_state.equipe.items()):
+            st.write(f"👤 **{nome_f}** — *{cargo_f}*")
+    with col_eq2:
+        with st.form("form_novo_f"):
+            nf = st.text_input("Nome")
+            cf = st.text_input("Função")
+            if st.form_submit_button("Cadastrar Funcionário"):
+                if nf.strip():
+                    st.session_state.equipe[nf.strip()] = cf.strip()
+                    st.rerun()
+
+# ------------------------------------------------------------------------------
+# 10. FILA INDIVIDUAL
+# ------------------------------------------------------------------------------
+elif menu == "Fila Individual":
+    st.subheader("Fila de Trabalho por Integrante")
+    user_sel = st.selectbox("Selecionar Integrante:", list(st.session_state.equipe.keys()))
+    
+    subs_meus = [s for s in st.session_state.subprocessos if s["responsavel_sub"] == user_sel]
+    maes_meus = [p for p in st.session_state.processos_mae if p["responsavel_mae"] == user_sel]
+    
+    st.markdown(f"##### Processos Mãe sob Responsabilidade de {user_sel} ({len(maes_meus)})")
+    for mm in maes_meus:
+        st.info(f"**Nº Processo Mãe:** {mm['numero_processo_mae']} | **Cliente:** {mm['cliente_nome']} | **Status:** {mm['status']}")
+        
+    st.markdown(f"##### Subprocessos / Exigências sob Responsabilidade de {user_sel} ({len(subs_meus)})")
+    for sm in subs_meus:
+        st.warning(f"**Órgão:** {sm['orgao_subprocesso']} | **Nº:** {sm['numero_subprocesso']} | **Exigência:** {sm['descricao_exigencia']} | **Status:** {sm['status']}")
+
+# ------------------------------------------------------------------------------
+# 11. RELATÓRIOS
+# ------------------------------------------------------------------------------
+elif menu == "Relatórios":
+    st.subheader("Exportação de Dados Consolidados")
+    df_m = pd.DataFrame(st.session_state.processos_mae)
+    if not df_m.empty:
+        st.dataframe(df_m[["numero_processo_mae", "cliente_nome", "endereco_empreendimento", "servico_contratado", "responsavel_mae", "status"]], use_container_width=True)
+        csv_data = df_m.to_csv(index=False).encode('utf-8')
+        st.download_button("Exportar Processos Mãe (CSV)", data=csv_data, file_name="relatorio_processos_mae_b2x.csv", mime="text/csv")
