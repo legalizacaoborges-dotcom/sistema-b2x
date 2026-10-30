@@ -260,4 +260,151 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
     tab_p1, tab_p2 = st.tabs(["➕ Cadastrar Novo Processo", "✏️ Editar Processo Existente"])
     clis = get_clientes()
     dict_cli = {c["id"]: c["nome_razao"] for c in clis} if clis else {}
-    lista
+    lista_eq = list(get_equipe().keys())
+
+    with tab_p1:
+        if dict_cli:
+            cli_id_p = st.selectbox("Cliente *", list(dict_cli.keys()), format_func=lambda x: dict_cli[x])
+            cli_obj_p = get_cliente_por_id(cli_id_p)
+            ends = cli_obj_p.get("enderecos_empreendimentos", []) if cli_obj_p else []
+            opcoes_ends = (ends if isinstance(ends, list) else [ends]) + ["+ Novo Endereço"]
+            
+            with st.form("form_p_novo"):
+                end_p = st.selectbox("Endereço da Obra *", opcoes_ends)
+                num_p = st.text_input("Nº Processo *")
+                serv_p = st.text_input("Serviço *")
+                resp_p = st.selectbox("Responsável *", lista_eq if lista_eq else ["Anna"])
+                st_p = st.selectbox("Status Inicial", STATUS_OPCOES, index=2)
+                
+                if st.form_submit_button("Cadastrar e Salvar Processo"):
+                    if num_p.strip():
+                        run_query("""INSERT INTO processos_principais (cliente_id, numero_processo_principal, endereco_empreendimento, servico_contratado, responsavel_principal, status, data_inicio)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""", (cli_id_p, num_p, end_p, serv_p, resp_p, st_p, str(date.today())), fetchall=False)
+                        st.success("Processo cadastrado com sucesso!")
+                        st.rerun()
+        else:
+            st.info("Cadastre um cliente antes de criar um processo.")
+
+    with tab_p2:
+        procs = get_processos_principais()
+        if procs:
+            dict_procs = {p["id"]: f"{p['numero_processo_principal']} ({p['endereco_empreendimento']})" for p in procs}
+            p_edit_id = st.selectbox("Selecione o Processo:", list(dict_procs.keys()), format_func=lambda x: dict_procs[x])
+            obj_p = get_processo_por_id(p_edit_id)
+            if obj_p:
+                with st.form("form_p_edit"):
+                    edit_num = st.text_input("Nº Processo", value=obj_p.get("numero_processo_principal", ""))
+                    edit_serv = st.text_input("Serviço", value=obj_p.get("servico_contratado", ""))
+                    if st.form_submit_button("Atualizar Processo"):
+                        run_query("UPDATE processos_principais SET numero_processo_principal=?, servico_contratado=? WHERE id=?", (edit_num, edit_serv, p_edit_id), fetchall=False)
+                        st.success("Atualizado com sucesso!")
+                        st.rerun()
+        else:
+            st.info("Nenhum Processo Principal cadastrado ainda para edição.")
+
+elif menu == "Fila Individual":
+    st.subheader("Fila de Trabalho por Integrante")
+    equipe_map = get_equipe()
+    if equipe_map:
+        user_sel = st.selectbox("Selecionar Integrante:", list(equipe_map.keys()))
+        procs = [p for p in get_processos_principais() if p.get("responsavel_principal") == user_sel]
+        subs = [s for s in get_subprocessos() if s.get("responsavel_sub") == user_sel]
+        
+        st.markdown(f"##### Processos Principais ({len(procs)})")
+        if procs:
+            for p in procs:
+                st.info(f"**Nº Processo:** {p.get('numero_processo_principal')} | **Status:** {p.get('status')}")
+        else:
+            st.write("Nenhum processo principal atribuído a este integrante.")
+            
+        st.markdown(f"##### Subprocessos / Exigências ({len(subs)})")
+        if subs:
+            for s in subs:
+                st.warning(f"**Órgão:** {s.get('orgao_subprocesso')} | **Exigência:** {s.get('descricao_exigencia')}")
+        else:
+            st.write("Nenhum subprocesso atribuído a este integrante.")
+
+elif menu == "Gestão da Equipe":
+    st.subheader("Gerenciamento de Funcionários")
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown("##### Integrantes Cadastrados")
+        for n, c in list(get_equipe().items()):
+            st.write(f"👤 **{n}** — *{c}*")
+    with col2:
+        st.markdown("##### Adicionar Integrante")
+        with st.form("form_eq"):
+            nf = st.text_input("Nome *")
+            cf = st.text_input("Cargo *")
+            if st.form_submit_button("Adicionar Funcionário"):
+                if nf.strip():
+                    run_query("INSERT INTO equipe (nome, cargo) VALUES (?, ?)", (nf.strip(), cf.strip()), fetchall=False)
+                    st.success("Integrante adicionado!")
+                    st.rerun()
+
+elif menu == "Gestão de Órgãos":
+    st.subheader("Cadastro de Órgãos")
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown("##### Órgãos Mapeados")
+        for org in get_orgaos():
+            st.write(f"🏛️ **{org}**")
+    with col2:
+        st.markdown("##### Adicionar Órgão")
+        with st.form("form_org"):
+            novo_o = st.text_input("Nome do Órgão *")
+            if st.form_submit_button("Cadastrar"):
+                if novo_o.strip():
+                    run_query("INSERT INTO orgaos (nome) VALUES (?)", (novo_o.strip(),), fetchall=False)
+                    st.success("Órgão adicionado!")
+                    st.rerun()
+
+elif menu == "Gestão de Subprocessos":
+    st.subheader("Subprocessos & Restrições")
+    tab_s1, tab_s2 = st.tabs(["➕ Cadastrar Subprocesso", "📋 Listar Subprocessos"])
+    procs = get_processos_principais()
+    
+    with tab_s1:
+        if procs:
+            dict_p_sub = {p["id"]: f"{p['numero_processo_principal']} ({p['endereco_empreendimento']})" for p in procs}
+            with st.form("form_sub_novo"):
+                pid_sub = st.selectbox("Processo Principal *", list(dict_p_sub.keys()), format_func=lambda x: dict_p_sub[x])
+                orgao_s = st.selectbox("Órgão *", get_orgaos())
+                num_s = st.text_input("Nº Subprocesso")
+                desc_s = st.text_area("Exigência *")
+                resp_s = st.selectbox("Responsável *", list(get_equipe().keys()))
+                if st.form_submit_button("Salvar Subprocesso"):
+                    run_query("""INSERT INTO subprocessos (processo_principal_id, orgao_subprocesso, numero_subprocesso, descricao_exigencia, responsavel_sub, status, data_inicio)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)""", (pid_sub, orgao_s, num_s, desc_s, resp_s, "Em Tramitação", str(date.today())), fetchall=False)
+                    st.success("Cadastrado com sucesso!")
+                    st.rerun()
+        else:
+            st.info("É necessário ter ao menos um Processo Principal cadastrado.")
+
+    with tab_s2:
+        subs = get_subprocessos()
+        if subs:
+            st.dataframe(pd.DataFrame(subs), use_container_width=True)
+        else:
+            st.info("Nenhum subprocesso cadastrado.")
+
+elif menu == "Módulo Financeiro (Mariana)":
+    st.subheader("Módulo Financeiro")
+    tab_f1, tab_f2 = st.tabs(["📋 Extrato Financeiro", "➕ Novo Lançamento"])
+    
+    with tab_f1:
+        fin = get_financeiro()
+        if fin:
+            st.dataframe(pd.DataFrame(fin), use_container_width=True)
+        else:
+            st.info("Nenhum lançamento financeiro registrado.")
+            
+    with tab_f2:
+        clis = get_clientes()
+        if clis:
+            dict_cli_f = {c["id"]: c["nome_razao"] for c in clis}
+            with st.form("form_fin_novo"):
+                cli_f_id = st.selectbox("Cliente *", list(dict_cli_f.keys()), format_func=lambda x: dict_cli_f[x])
+                tipo_f = st.selectbox("Tipo *", ["DARM / Taxa Municipal", "RRT (CAU)", "ART (CREA)", "Boleto Cartório / RGI", "Honorários / Outros"])
+                num_f = st.text_input("Nº Documento / Boleto")
+                desc_f =
