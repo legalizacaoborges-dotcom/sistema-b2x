@@ -109,7 +109,6 @@ def init_db():
         )
     """)
     
-    # Carga inicial de apoio
     c.execute("SELECT COUNT(*) FROM clientes")
     if c.fetchone()[0] == 0:
         c.execute("""
@@ -344,3 +343,138 @@ elif menu == "Cadastro de Clientes":
                     st.markdown("###### 🏢 Endereços de Empreendimentos Cadastrados:")
                     ends = cli_edit_obj.get("enderecos_empreendimentos", [])
                     if isinstance(ends, list):
+                        for idx_end, end_atual in enumerate(ends):
+                            st.write(f"• **Endereço {idx_end + 1}:** {end_atual}")
+                    else:
+                        st.write(f"• **Endereço 1:** {ends}")
+
+                    novo_end_incluir = st.text_input("➕ Adicionar Novo Endereço de Empreendimento / Obra:")
+
+                    if st.form_submit_button("Atualizar Cadastro e Endereços"):
+                        lista_ends = ends if isinstance(ends, list) else [ends]
+                        if novo_end_incluir.strip():
+                            lista_ends.append(novo_end_incluir.strip())
+
+                        run_query("""
+                            UPDATE clientes SET nome_razao=?, cpf_cnpj=?, representante_legal=?, numero_proposta=?, numero_contrato=?, endereco_cliente=?, enderecos_empreendimentos=?
+                            WHERE id=?
+                        """, (edit_nome_raz, edit_cpf_cnpj, edit_rep_legal, edit_num_prop, edit_num_cont, edit_end_cli, json.dumps(lista_ends), cli_edit_id), fetchall=False)
+                        st.success("Cadastro atualizado com sucesso!")
+                        st.rerun()
+
+    with tab_cli3:
+        clis = get_clientes()
+        if clis:
+            map_cli_del = {c["id"]: c["nome_razao"] for c in clis}
+            cli_excluir_id = st.selectbox("Selecione o Cliente para Excluir:", list(map_cli_del.keys()), format_func=lambda x: map_cli_del[x])
+            if st.button("🚨 Excluir Cliente Selecionado", type="primary"):
+                run_query("DELETE FROM clientes WHERE id=?", (cli_excluir_id,), fetchall=False)
+                st.success("Cliente removido com sucesso!")
+                st.rerun()
+
+    st.divider()
+    st.markdown("##### Base Geral de Clientes")
+    df_cli_view = run_df("SELECT id, tipo_pessoa, nome_razao, cpf_cnpj, numero_proposta, numero_contrato FROM clientes")
+    st.dataframe(df_cli_view, use_container_width=True)
+
+# ------------------------------------------------------------------------------
+# 3. DASHBOARD EXECUTIVO
+# ------------------------------------------------------------------------------
+elif menu == "Dashboard Executivo":
+    st.subheader("Painel Geral de Acompanhamento")
+    df_p = run_df("SELECT * FROM processos_principais")
+    df_sub = run_df("SELECT * FROM subprocessos")
+    df_fin = run_df("SELECT * FROM financeiro")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Clientes Cadastrados", len(get_clientes()))
+    c2.metric("Processos Principais", len(df_p))
+    c3.metric("Subprocessos / Restrições", len(df_sub))
+    
+    total_pendente = df_fin[df_fin["status_pagamento"] == "Pendente"]["valor"].sum() if not df_fin.empty else 0.0
+    c4.metric("Taxas Pendentes (R$)", f"R$ {total_pendente:,.2f}")
+
+    st.divider()
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown("##### Processos Principais por Status")
+        if not df_p.empty and "status" in df_p.columns:
+            st.bar_chart(df_p["status"].value_counts())
+        else:
+            st.info("Nenhum processo principal cadastrado no momento para gerar o gráfico.")
+
+    with col_g2:
+        st.markdown("##### Subprocessos por Órgão Restritivo")
+        if not df_sub.empty and "orgao_subprocesso" in df_sub.columns:
+            st.bar_chart(df_sub["orgao_subprocesso"].value_counts())
+        else:
+            st.info("Nenhum subprocesso cadastrado no momento para gerar o gráfico.")
+
+# ------------------------------------------------------------------------------
+# 4. ENTRADA PROCESSO PRINCIPAL
+# ------------------------------------------------------------------------------
+elif menu == "Entrada Processo Principal (LICIN/SMDU)":
+    st.subheader("Cadastro e Edição de Processos Principais")
+    tab_p1, tab_p2 = st.tabs(["➕ Cadastrar Novo Processo", "✏️ Editar Processo Existente"])
+    
+    clis = get_clientes()
+    dict_clientes = {c["id"]: c["nome_razao"] for c in clis} if clis else {}
+    equipe_dict = get_equipe()
+    lista_equipe_nomes = list(equipe_dict.keys()) if equipe_dict else ["Anna"]
+
+    with tab_p1:
+        if dict_clientes:
+            st.markdown("##### Identificação do Cliente e Endereço do Empreendimento")
+            cli_selecionado_id = st.selectbox("Cliente Cadastrado *", list(dict_clientes.keys()), format_func=lambda x: dict_clientes[x], key="select_cli_p1")
+            cliente_obj = get_cliente_por_id(cli_selecionado_id)
+            
+            raw_ends = cliente_obj.get("enderecos_empreendimentos", []) if cliente_obj else []
+            enderecos_disponiveis = raw_ends if isinstance(raw_ends, list) else [raw_ends]
+            opcoes_enderecos = enderecos_disponiveis + ["+ Adicionar Novo Endereço para este Cliente"]
+
+            with st.form("form_processo_principal"):
+                c_pm1, c_pm2 = st.columns(2)
+                with c_pm1:
+                    end_sel = st.selectbox("Endereço do Empreendimento / Obra *", opcoes_enderecos)
+                    novo_end_input = st.text_input("Se selecionou 'Adicionar Novo', digite o endereço aqui:")
+
+                with c_pm2:
+                    num_proc_p = st.text_input("Nº do Processo Principal *", placeholder="Ex: 04/001.234/2026")
+                    servico_p = st.text_input("Serviço Contratado *", placeholder="Ex: Licença de Obra / Habite-se")
+
+                st.markdown("##### Atribuição e Prazos")
+                c_pm3, c_pm4 = st.columns(2)
+                with c_pm3:
+                    resp_p = st.selectbox("Responsável pelo Processo Principal *", lista_equipe_nomes)
+                    data_inc_p = st.date_input("Data de Início do Processo", value=date.today())
+                with c_pm4:
+                    prazo_p = st.date_input("Prazo Limite / Validade da Licença", value=None)
+                    status_p_init = st.selectbox("Status Inicial", STATUS_OPCOES, index=2)
+
+                if st.form_submit_button("Cadastrar e Salvar Processo"):
+                    if num_proc_p.strip() != "":
+                        if end_sel == "+ Adicionar Novo Endereço para este Cliente":
+                            end_final = novo_end_input.strip() if novo_end_input.strip() != "" else "Endereço Não Informado"
+                            lista_atual = enderecos_disponiveis
+                            lista_atual.append(end_final)
+                            run_query("UPDATE clientes SET enderecos_empreendimentos=? WHERE id=?", (json.dumps(lista_atual), cli_selecionado_id), fetchall=False)
+                        else:
+                            end_final = end_sel
+                        
+                        run_query("""
+                            INSERT INTO processos_principais (cliente_id, numero_processo_principal, endereco_empreendimento, servico_contratado, responsavel_principal, status, data_inicio, prazo_limite)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (cli_selecionado_id, num_proc_p, end_final, servico_p, resp_p, status_p_init, str(data_inc_p), str(prazo_p) if prazo_p else None), fetchall=False)
+                        
+                        st.success("Processo Principal cadastrado com sucesso!")
+                        st.rerun()
+
+    with tab_p2:
+        procs = get_processos_principais()
+        if procs:
+            dict_procs = {p["id"]: f"{p['numero_processo_principal']} — {get_cliente_por_id(p['cliente_id'])['nome_razao'] if get_cliente_por_id(p['cliente_id']) else 'Cliente'}" for p in procs}
+            proc_p_edit_id = st.selectbox("Selecione o Processo Principal para Editar:", list(dict_procs.keys()), format_func=lambda x: dict_procs[x], key="sel_p_edit_tab")
+            obj_p_e = get_processo_por_id(proc_p_edit_id)
+
+            if obj_p_e:
+                with st.form("form_edit_proc_p
