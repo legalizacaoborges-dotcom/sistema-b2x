@@ -407,4 +407,37 @@ elif menu == "Módulo Financeiro (Mariana)":
                 cli_f_id = st.selectbox("Cliente *", list(dict_cli_f.keys()), format_func=lambda x: dict_cli_f[x])
                 tipo_f = st.selectbox("Tipo *", ["DARM / Taxa Municipal", "RRT (CAU)", "ART (CREA)", "Boleto Cartório / RGI", "Honorários / Outros"])
                 num_f = st.text_input("Nº Documento / Boleto")
-                desc_f =
+                desc_f = st.text_input("Descrição da Taxa")
+                val_f = st.number_input("Valor (R$)", min_value=0.0, step=10.0)
+                venc_f = st.date_input("Vencimento")
+                pag_f = st.selectbox("Pagador", ["B2x (A Reembolsar)", "Cliente Direto"])
+                
+                if st.form_submit_button("Salvar Lançamento"):
+                    run_query("""INSERT INTO financeiro (cliente_id, tipo_documento, numero_documento, descricao, valor, vencimento, pagador, status_pagamento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (cli_f_id, tipo_f, num_f, desc_f, val_f, str(venc_f), pag_f, "Pendente"), fetchall=False)
+                    st.success("Lançamento salvo!")
+                    st.rerun()
+        else:
+            st.info("Cadastre um cliente antes de lançar dados financeiros.")
+
+elif menu == "Painel Geral de Processos":
+    st.subheader("Visão Geral do Painel")
+    procs = get_processos_principais()
+    subs_todos = get_subprocessos()
+    if procs:
+        for pm in procs:
+            cli_m = get_cliente_por_id(pm['cliente_id'])
+            nome_c = cli_m['nome_razao'] if cli_m else 'Cliente'
+            st.info(f"**Processo:** {pm.get('numero_processo_principal')} | **Cliente:** {nome_c} | **Endereço:** {pm.get('endereco_empreendimento')} | **Status:** {pm.get('status')}")
+    else:
+        st.info("Nenhum Processo Principal cadastrado para exibição neste painel.")
+
+elif menu == "Relatórios":
+    st.subheader("Exportação de Relatórios")
+    procs = get_processos_principais()
+    if procs:
+        df_r = pd.DataFrame(procs)
+        st.dataframe(df_r, use_container_width=True)
+        st.download_button("Exportar CSV de Processos", df_r.to_csv(index=False).encode('utf-8'), "relatorio_processos.csv", "text/csv")
+    else:
+        st.info("Nenhum processo cadastrado para emissão de relatório.")
