@@ -111,4 +111,95 @@ if "processos_principais" not in st.session_state:
             "responsavel_principal": "Anna",
             "status": "4. Em Exigência / Aguardando Documentos",
             "data_inicio": date(2026, 2, 1),
-            "prazo_limite":
+            "prazo_limite": date(2026, 12, 15),
+            "despachos": [
+                {"data": "2026-03-10", "texto": "Publicado despacho de exigências no SEI.RIO exigindo parecer do CBMERJ e GEO-RIO."}
+            ]
+        }
+    ]
+
+# 5. Subprocessos
+if "subprocessos" not in st.session_state:
+    st.session_state.subprocessos = [
+        {
+            "id": 101,
+            "processo_principal_id": 1,
+            "cliente_id": 1,
+            "orgao_subprocesso": "Corpo de Bombeiros (CBMERJ)",
+            "numero_subprocesso": "CBMERJ-2026/99812",
+            "descricao_exigencia": "Laudo de Exigências e Certificado de Aprovação do Sistema Contra Incêndio",
+            "informacao_relevante": "Atentar para a necessidade de reserva técnica de incêndio no castelo d'água superior.",
+            "responsavel_sub": "Bruno",
+            "status": "Em Tramitação",
+            "data_inicio": date(2026, 3, 15),
+            "prazo_fim": date(2026, 11, 30),
+            "notas_internas": [
+                {"data": "2026-03-16 10:00", "autor": "Bruno", "texto": "Reunião com o major do DGST marcada para quinta-feira."}
+            ],
+            "despachos": [
+                {"data": "2026-03-20", "texto": "Protocolado projeto de segurança contra incêndio no DGST."}
+            ],
+            "documentos": [
+                {"id": 1, "nome": "Protocolo_CBMERJ.pdf", "data": "2026-03-20"}
+            ]
+        }
+    ]
+
+# Compatibilidade de chaves nos subprocessos antigos
+for sub in st.session_state.subprocessos:
+    if "processo_principal_id" not in sub and "processo_mae_id" in sub:
+        sub["processo_principal_id"] = sub["processo_mae_id"]
+
+# 6. Financeiro
+if "financeiro" not in st.session_state:
+    st.session_state.financeiro = [
+        {
+            "id": 1,
+            "processo_principal_id": 1,
+            "subprocesso_id": 101,
+            "cliente_id": 1,
+            "tipo_documento": "DARM / Taxa CBMERJ",
+            "numero_documento": "DARM nº 99283-1",
+            "descricao": "Taxa de Análise de Projeto CBMERJ",
+            "valor": 480.00,
+            "vencimento": date(2026, 11, 10),
+            "pagador": "B2x (A Reembolsar)",
+            "status_pagamento": "Pendente",
+            "nota_fiscal_emitida": "Não",
+            "comprovante_anexado": None
+        }
+    ]
+
+STATUS_OPCOES = [
+    "1. Captação / Proposta Comercial",
+    "2. Análise Inicial / Elaboração Projeto",
+    "3. Em Tramitação no Órgão",
+    "4. Em Exigência / Aguardando Documentos",
+    "5. Aguardando Pagamento de Taxa/RRT",
+    "6. Concluído / Licenciado / Averbado"
+]
+
+# MENU LATERAL EM ORDEM ALFABÉTICA
+modulos_alfabetico = [
+    "Busca Integrada (Lupa 360°)",
+    "Cadastro de Clientes",
+    "Dashboard Executivo",
+    "Entrada Processo Principal (LICIN/SMDU)",
+    "Fila Individual",
+    "Gestão da Equipe",
+    "Gestão de Órgãos",
+    "Gestão de Subprocessos",
+    "Módulo Financeiro (Mariana)",
+    "Painel Geral de Processos",
+    "Relatórios"
+]
+
+if os.path.exists("LOGO.png"):
+    st.sidebar.image("LOGO.png", use_container_width=True)
+else:
+    st.sidebar.markdown("### B2x Arquitetura")
+
+st.sidebar.markdown("---")
+menu = st.sidebar.radio("Módulos do Sistema", modulos_alfabetico)
+
+st.title("B2x Arquitetura | Sistema de Gest
