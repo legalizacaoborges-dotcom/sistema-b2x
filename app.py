@@ -179,8 +179,8 @@ STATUS_OPCOES = [
     "6. Concluído / Licenciado / Averbado"
 ]
 
-# MENU LATERAL ORGANIZADO EM ORDEM ALFABÉTICA
-modulos_alfabetico = sorted([
+# MENU LATERAL EM ORDEM ALFABÉTICA
+modulos_alfabetico = [
     "Busca Integrada (Lupa 360°)",
     "Cadastro de Clientes",
     "Dashboard Executivo",
@@ -192,7 +192,7 @@ modulos_alfabetico = sorted([
     "Módulo Financeiro (Mariana)",
     "Painel Geral de Processos",
     "Relatórios"
-])
+]
 
 if os.path.exists("LOGO.png"):
     st.sidebar.image("LOGO.png", use_container_width=True)
@@ -458,19 +458,3 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
                     st.session_state.processos_principais.append({
                         "id": novo_id_p,
                         "cliente_id": cliente_obj["id"],
-                        "cliente_nome": cliente_obj["nome_razao"],
-                        "numero_processo_principal": num_proc_p,
-                        "endereco_empreendimento": end_final,
-                        "servico_contratado": servico_p,
-                        "responsavel_principal": resp_p,
-                        "status": status_p_init,
-                        "data_inicio": data_inc_p,
-                        "prazo_limite": prazo_p,
-                        "despachos": []
-                    })
-                    salvar_dados(pd.DataFrame(st.session_state.processos_principais), "Processos_Principais")
-                    salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
-                    st.success("Processo Principal (LICIN/SMDU) cadastrado e vinculado ao endereço com sucesso!")
-                    st.rerun()
-                else:
-                    st.error("Informe o Número do Processo Principal.")
