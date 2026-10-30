@@ -96,4 +96,59 @@ def get_clientes():
     records = df.to_dict(orient="records")
     for r in records:
         if isinstance(r.get("enderecos_empreendimentos"), str):
-            try
+            try:
+                r["enderecos_empreendimentos"] = json.loads(r["enderecos_empreendimentos"])
+            except Exception:
+                r["enderecos_empreendimentos"] = [r["enderecos_empreendimentos"]]
+    return records
+
+def get_cliente_por_id(cid):
+    clis = get_clientes()
+    return next((c for c in clis if c["id"] == cid), None)
+
+def get_processos_principais():
+    return run_df("SELECT * FROM processos_principais").to_dict(orient="records")
+
+def get_processo_por_id(pid):
+    procs = get_processos_principais()
+    return next((p for p in procs if p["id"] == pid), None)
+
+def get_subprocessos():
+    return run_df("SELECT * FROM subprocessos").to_dict(orient="records")
+
+def get_equipe():
+    df = run_df("SELECT * FROM equipe")
+    return {r["nome"]: r["cargo"] for _, r in df.iterrows()}
+
+def get_orgaos():
+    return run_df("SELECT * FROM orgaos")["nome"].tolist()
+
+def get_financeiro():
+    return run_df("SELECT * FROM financeiro").to_dict(orient="records")
+
+STATUS_OPCOES = [
+    "1. Captação / Proposta Comercial", "2. Análise Inicial / Elaboração Projeto",
+    "3. Em Tramitação no Órgão", "4. Em Exigência / Aguardando Documentos",
+    "5. Aguardando Pagamento de Taxa/RRT", "6. Concluído / Licenciado / Averbado"
+]
+
+modulos_alfabetico = [
+    "Busca Integrada (Lupa 360°)", "Cadastro de Clientes", "Dashboard Executivo",
+    "Entrada Processo Principal (LICIN/SMDU)", "Fila Individual", "Gestão da Equipe",
+    "Gestão de Órgãos", "Gestão de Subprocessos", "Módulo Financeiro (Mariana)",
+    "Painel Geral de Processos", "Relatórios"
+]
+
+if os.path.exists("LOGO.png"):
+    st.sidebar.image("LOGO.png", use_container_width=True)
+else:
+    st.sidebar.markdown("### B2x Arquitetura")
+
+st.sidebar.markdown("---")
+menu = st.sidebar.radio("Módulos do Sistema", modulos_alfabetico)
+st.title("B2x Arquitetura | Sistema de Gestão Processual Sincronizado")
+
+if menu == "Busca Integrada (Lupa 360°)":
+    st.subheader("🔍 Consulta Consolidada por Cliente")
+    clientes = get_clientes()
+    nombres_clientes = {c["id"]: c
