@@ -202,4 +202,132 @@ else:
 st.sidebar.markdown("---")
 menu = st.sidebar.radio("Módulos do Sistema", modulos_alfabetico)
 
-st.title("B2x Arquitetura | Sistema de Gest
+st.title("B2x Arquitetura | Sistema de Gestão Processual Sincronizado")
+
+# ------------------------------------------------------------------------------
+# 1. BUSCA INTEGRADA (LUPA 360°)
+# ------------------------------------------------------------------------------
+if menu == "Busca Integrada (Lupa 360°)":
+    st.subheader("🔍 Consulta Consolidada por Cliente")
+    
+    nombres_clientes = [c["nome_razao"] for c in st.session_state.clientes]
+    cliente_sel_nome = st.selectbox("Selecione ou Pesquise o Nome do Cliente:", [""] + nombres_clientes)
+    
+    if cliente_sel_nome != "":
+        cliente_obj = next((c for c in st.session_state.clientes if c["nome_razao"] == cliente_sel_nome), None)
+        
+        if cliente_obj:
+            st.markdown(f"### Ficha 360°: {cliente_obj['nome_razao']}")
+            
+            c_info1, c_info2, c_info3 = st.columns(3)
+            with c_info1:
+                st.write(f"**Tipo:** {cliente_obj['tipo_pessoa']}")
+                st.write(f"**CPF/CNPJ:** {cliente_obj['cpf_cnpj']}")
+                st.write(f"**Representante:** {cliente_obj.get('representante_legal') or 'N/A'}")
+            with c_info2:
+                st.write(f"**Proposta:** {cliente_obj.get('numero_proposta') or 'N/A'}")
+                st.write(f"**Contrato:** {cliente_obj.get('numero_contrato') or 'N/A'}")
+            with c_info3:
+                st.write(f"**Endereço Comercial:** {cliente_obj.get('endereco_cliente') or 'N/A'}")
+                st.write("**Empreendimentos / Endereços de Obra:**")
+                for end in cliente_obj.get("enderecos_empreendimentos", []):
+                    st.write(f"• {end}")
+
+            st.divider()
+            
+            procs_p_cli = [p for p in st.session_state.processos_principais if p["cliente_id"] == cliente_obj["id"]]
+            st.markdown(f"##### 📌 Processos Principais e Subprocessos por Endereço ({len(procs_p_cli)})")
+            
+            for pmc in procs_p_cli:
+                st.info(f"**Endereço:** {pmc['endereco_empreendimento']}\n\n**Processo Principal:** {pmc['numero_processo_principal']} | **Status:** `{pmc['status']}`")
+                subs_cli = [s for s in st.session_state.subprocessos if s.get("processo_principal_id", s.get("processo_mae_id")) == pmc["id"]]
+                for sc in subs_cli:
+                    st.write(f" └─ **Subprocesso ({sc['orgao_subprocesso']}):** {sc['numero_subprocesso']} — Status: `{sc['status']}`")
+
+            st.divider()
+
+            financeiro_cliente = [f for f in st.session_state.financeiro if f["cliente_id"] == cliente_obj["id"]]
+            st.markdown(f"##### 💰 Histórico Financeiro ({len(financeiro_cliente)})")
+            
+            if financeiro_cliente:
+                df_fin_cli = pd.DataFrame(financeiro_cliente)
+                st.dataframe(
+                    df_fin_cli[["tipo_documento", "numero_documento", "descricao", "valor", "vencimento", "pagador", "status_pagamento"]],
+                    use_container_width=True
+                )
+
+# ------------------------------------------------------------------------------
+# 2. CADASTRO DE CLIENTES
+# ------------------------------------------------------------------------------
+elif menu == "Cadastro de Clientes":
+    st.subheader("Gerenciamento de Clientes e Múltiplos Endereços (Mesmo CNPJ)")
+    
+    tab_cli1, tab_cli2, tab_cli3 = st.tabs([
+        "➕ Cadastrar Novo Cliente", 
+        "✏️ Editar Cadastro & Adicionar Endereços", 
+        "🗑️ Excluir Cliente"
+    ])
+    
+    with tab_cli1:
+        with st.form("form_novo_cliente"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                tipo_p = st.selectbox("Tipo de Pessoa *", ["Pessoa Jurídica", "Pessoa Física"])
+                nome_raz = st.text_input("Nome Completo ou Razão Social *")
+                cpf_cnpj = st.text_input("CPF ou CNPJ *")
+                rep_legal = st.text_input("Nome do Representante Legal (para PJ)")
+
+            with col_c2:
+                num_prop = st.text_input("Número da Proposta Comercial")
+                num_cont = st.text_input("Número do Contrato")
+                end_cli = st.text_input("Endereço Comercial / Sede")
+                end_emp_inicial = st.text_input("Endereço do 1º Empreendimento / Obra *")
+
+            btn_salvar_cli = st.form_submit_button("Salvar Cliente na Nuvem")
+            if btn_salvar_cli:
+                if nome_raz.strip() != "":
+                    novo_id_cli = max([c["id"] for c in st.session_state.clientes], default=0) + 1
+                    st.session_state.clientes.append({
+                        "id": novo_id_cli,
+                        "tipo_pessoa": tipo_p,
+                        "nome_razao": nome_raz,
+                        "cpf_cnpj": cpf_cnpj,
+                        "representante_legal": rep_legal,
+                        "endereco_cliente": end_cli,
+                        "enderecos_empreendimentos": [end_emp_inicial] if end_emp_inicial else [],
+                        "numero_proposta": num_prop,
+                        "numero_contrato": num_cont,
+                        "data_inicio": date.today()
+                    })
+                    salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                    st.success("Cliente cadastrado e salvo na nuvem com sucesso!")
+                    st.rerun()
+
+    with tab_cli2:
+        if st.session_state.clientes:
+            st.markdown("##### Alterar Dados e Incluir Novos Endereços de Obra/Empreendimento")
+            cli_edit_nome = st.selectbox("Selecione o Cliente para Editar:", [c["nome_razao"] for c in st.session_state.clientes], key="sel_cli_edit")
+            cli_edit_obj = next(c for c in st.session_state.clientes if c["nome_razao"] == cli_edit_nome)
+
+            with st.form("form_editar_cliente"):
+                c_e1, c_e2 = st.columns(2)
+                with c_e1:
+                    edit_nome_raz = st.text_input("Razão Social / Nome Completo", value=cli_edit_obj.get("nome_razao", ""))
+                    edit_cpf_cnpj = st.text_input("CPF / CNPJ", value=cli_edit_obj.get("cpf_cnpj", ""))
+                    edit_rep_legal = st.text_input("Representante Legal", value=cli_edit_obj.get("representante_legal", ""))
+                with c_e2:
+                    edit_num_prop = st.text_input("Número da Proposta", value=cli_edit_obj.get("numero_proposta", ""))
+                    edit_num_cont = st.text_input("Número do Contrato", value=cli_edit_obj.get("numero_contrato", ""))
+                    edit_end_cli = st.text_input("Endereço Comercial / Sede", value=cli_edit_obj.get("endereco_cliente", ""))
+
+                st.markdown("---")
+                st.markdown("###### 🏢 Endereços de Empreendimentos / Obras Cadastrados:")
+                for idx_end, end_atual in enumerate(cli_edit_obj.get("enderecos_empreendimentos", [])):
+                    st.write(f"• **Endereço {idx_end + 1}:** {end_atual}")
+
+                novo_end_incluir = st.text_input("➕ Adicionar Novo Endereço de Empreendimento / Obra:")
+
+                btn_salvar_edicao = st.form_submit_button("Atualizar Cadastro e Endereços na Nuvem")
+
+                if btn_salvar_edicao:
+                    cli_edit_obj["nome_razao"] = edit_
