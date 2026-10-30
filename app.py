@@ -508,4 +508,242 @@ elif menu == "Gestão da Equipe":
         for n, c in list(get_equipe().items()):
             c_f1, c_f2 = st.columns([4, 1])
             with c_f1:
-                st.write(f"👤 **
+                st.write(f"👤 **{n}** — *{c}*")
+            with c_f2:
+                if st.button("Excluir", key=f"del_eq_{n}"):
+                    run_query("DELETE FROM equipe WHERE nome=?", (n,), fetchall=False)
+                    st.rerun()
+    with col2:
+        st.markdown("##### Adicionar Integrante")
+        with st.form("form_eq"):
+            nf = st.text_input("Nome *")
+            cf = st.text_input("Cargo *")
+            if st.form_submit_button("Adicionar Funcionário"):
+                if nf.strip():
+                    run_query("INSERT INTO equipe (nome, cargo) VALUES (?, ?)", (nf.strip(), cf.strip()), fetchall=False)
+                    st.success("Integrante adicionado!")
+                    st.rerun()
+
+# ------------------------------------------------------------------------------
+# 7. GESTÃO DE ÓRGÃOS
+# ------------------------------------------------------------------------------
+elif menu == "Gestão de Órgãos":
+    st.subheader("Cadastro & Edição de Órgãos")
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown("##### Órgãos Mapeados")
+        df_o = get_orgaos_df()
+        for _, row in df_o.iterrows():
+            c_o1, c_o2 = st.columns([4, 1])
+            with c_o1:
+                st.write(f"🏛️ **{row['nome']}**")
+            with c_o2:
+                if st.button("Excluir", key=f"del_o_{row['id']}"):
+                    run_query("DELETE FROM orgaos WHERE id=?", (row['id'],), fetchall=False)
+                    st.rerun()
+    with col2:
+        st.markdown("##### Adicionar / Editar Órgão")
+        with st.form("form_org"):
+            novo_o = st.text_input("Nome do Órgão *")
+            if st.form_submit_button("Cadastrar"):
+                if novo_o.strip():
+                    run_query("INSERT INTO orgaos (nome) VALUES (?)", (novo_o.strip(),), fetchall=False)
+                    st.success("Órgão adicionado!")
+                    st.rerun()
+
+# ------------------------------------------------------------------------------
+# 8. GESTÃO DE SUBPROCESSOS
+# ------------------------------------------------------------------------------
+elif menu == "Gestão de Subprocessos":
+    st.subheader("Subprocessos & Restrições Vinculadas")
+    tab_s1, tab_s2 = st.tabs(["➕ Cadastrar Subprocesso", "📋 Listar Subprocessos"])
+    procs = get_processos_principais()
+    
+    with tab_s1:
+        if procs:
+            dict_p_sub = {}
+            for p in procs:
+                c_mae = get_cliente_por_id(p["cliente_id"])
+                dict_p_sub[p["id"]] = f"{c_mae['nome_razao'] if c_mae else 'Cliente'} | Proc: {p['numero_processo_principal']} | {p['endereco_empreendimento']}"
+            
+            with st.form("form_sub_novo"):
+                pid_sub = st.selectbox("Selecione o Processo Principal Vinculado *", list(dict_p_sub.keys()), format_func=lambda x: dict_p_sub[x])
+                c_s1, c_s2 = st.columns(2)
+                with c_s1:
+                    orgao_s = st.selectbox("Órgão *", get_orgaos())
+                    num_s = st.text_input("Nº Subprocesso")
+                    desc_s = st.text_area("Descrição da Exigência *")
+                with c_s2:
+                    resp_s = st.selectbox("Responsável *", list(get_equipe().keys()))
+                    num_desp_s = st.text_input("Número do Despacho")
+                    prazo_f_s = st.date_input("Prazo Limite para Cumprimento", value=None)
+
+                if st.form_submit_button("Salvar Subprocesso"):
+                    run_query("""INSERT INTO subprocessos (processo_principal_id, orgao_subprocesso, numero_subprocesso, descricao_exigencia, responsavel_sub, status, numero_despacho, data_inicio, prazo_fim)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (pid_sub, orgao_s, num_s, desc_s, resp_s, "Em Tramitação", num_desp_s, str(date.today()), str(prazo_f_s) if prazo_f_s else None), fetchall=False)
+                    st.success("Subprocesso cadastrado com sucesso!")
+                    st.rerun()
+        else:
+            st.info("É necessário ter ao menos um Processo Principal cadastrado.")
+
+    with tab_s2:
+        subs = get_subprocessos()
+        if subs:
+            dados_subs = []
+            for s in subs:
+                p_m = get_processo_por_id(s.get("processo_principal_id"))
+                c_m = get_cliente_por_id(p_m["cliente_id"]) if p_m else None
+                dados_subs.append({
+                    "Cliente": c_m["nome_razao"] if c_m else "N/A",
+                    "Processo Principal": p_m["numero_processo_principal"] if p_m else "N/A",
+                    "Endereço": p_m["endereco_empreendimento"] if p_m else "N/A",
+                    "Órgão": s.get("orgao_subprocesso"),
+                    "Nº Subprocesso": s.get("numero_subprocesso"),
+                    "Exigência": s.get("descricao_exigencia"),
+                    "Responsável": s.get("responsavel_sub"),
+                    "Status": s.get("status"),
+                    "Prazo Limite": s.get("prazo_fim")
+                })
+            st.dataframe(pd.DataFrame(dados_subs), use_container_width=True)
+        else:
+            st.info("Nenhum subprocesso cadastrado.")
+
+# ------------------------------------------------------------------------------
+# 9. MÓDULO FINANCEIRO
+# ------------------------------------------------------------------------------
+elif menu == "Módulo Financeiro (Mariana)":
+    st.subheader("Módulo Financeiro - Controle de Taxas, Boletos e Comprovantes")
+    tab_f1, tab_f2 = st.tabs(["📋 Extrato Financeiro Completo", "➕ Novo Lançamento Financeiro"])
+    
+    with tab_f1:
+        fin = get_financeiro()
+        if fin:
+            dados_f = []
+            for item in fin:
+                c_f = get_cliente_por_id(item.get("cliente_id"))
+                p_f = get_processo_por_id(item.get("processo_principal_id"))
+                dados_f.append({
+                    "Cliente": c_f["nome_razao"] if c_f else "N/A",
+                    "Processo Principal": p_f["numero_processo_principal"] if p_f else "Geral/Sede",
+                    "Endereço": p_f["endereco_empreendimento"] if p_f else (c_f["endereco_cliente"] if c_f else "N/A"),
+                    "Tipo Encargo": item.get("tipo_documento"),
+                    "Nº Doc/Boleto": item.get("numero_documento"),
+                    "Descrição": item.get("descricao"),
+                    "Valor (R$)": item.get("valor"),
+                    "Vencimento": item.get("vencimento"),
+                    "Pagador": item.get("pagador"),
+                    "Status": item.get("status_pagamento"),
+                    "Boleto Anexo": item.get("anexo_boleto_nome"),
+                    "Comprovante Anexo": item.get("anexo_comprovante_nome")
+                })
+            st.dataframe(pd.DataFrame(dados_f), use_container_width=True)
+        else:
+            st.info("Nenhum lançamento financeiro registrado.")
+            
+    with tab_f2:
+        clis = get_clientes()
+        procs = get_processos_principais()
+        if clis:
+            dict_cli_f = {c["id"]: c["nome_razao"] for c in clis}
+            cli_f_id = st.selectbox("Cliente *", list(dict_cli_f.keys()), format_func=lambda x: dict_cli_f[x])
+            
+            procs_do_cli = {p["id"]: f"Proc: {p['numero_processo_principal']} | {p['endereco_empreendimento']}" for p in procs if p.get("cliente_id") == cli_f_id}
+            
+            with st.form("form_fin_novo"):
+                proc_f_id = st.selectbox("Processo Principal / Endereço Relacionado *", [None] + list(procs_do_cli.keys()), format_func=lambda x: procs_do_cli.get(x, "Lançamento Geral do Cliente"))
+                c_fn1, c_fn2 = st.columns(2)
+                with c_fn1:
+                    tipo_f = st.selectbox("Tipo de Encargo *", ["DARM / Taxa Municipal", "RRT (CAU)", "ART (CREA)", "Boleto Cartório / RGI", "Honorários / Outros"])
+                    num_f = st.text_input("Nº Documento / Boleto")
+                    desc_f = st.text_input("Descrição da Taxa")
+                    val_f = st.number_input("Valor (R$)", min_value=0.0, step=10.0)
+                with c_fn2:
+                    venc_f = st.date_input("Vencimento")
+                    pag_f = st.selectbox("Responsável pelo Pagamento", ["B2x (A Reembolsar)", "Cliente Direto"])
+                    file_boleto = st.file_uploader("Anexar Boleto (PDF/Imagem)", type=["pdf", "png", "jpg"])
+                    file_comprovante = st.file_uploader("Anexar Comprovante de Pagamento (PDF/Imagem)", type=["pdf", "png", "jpg"])
+
+                if st.form_submit_button("Salvar Lançamento no Financeiro"):
+                    run_query("""INSERT INTO financeiro (processo_principal_id, cliente_id, tipo_documento, numero_documento, descricao, valor, vencimento, pagador, status_pagamento, anexo_boleto_nome, anexo_comprovante_nome)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (proc_f_id, cli_f_id, tipo_f, num_f, desc_f, val_f, str(venc_f), pag_f, "Pendente", file_boleto.name if file_boleto else None, file_comprovante.name if file_comprovante else None), fetchall=False)
+                    st.success("Lançamento salvo!")
+                    st.rerun()
+        else:
+            st.info("Cadastre um cliente antes de lançar dados financeiros.")
+
+# ------------------------------------------------------------------------------
+# 10. PAINEL GERAL DE PROCESSOS
+# ------------------------------------------------------------------------------
+elif menu == "Painel Geral de Processos":
+    st.subheader("Painel Geral de Processos Principais & Quantidade de Subprocessos")
+    procs = get_processos_principais()
+    subs_todos = get_subprocessos()
+    
+    if procs:
+        dados_painel = []
+        for pm in procs:
+            cli_m = get_cliente_por_id(pm['cliente_id'])
+            qnt_subs = len([s for s in subs_todos if s.get("processo_principal_id") == pm["id"]])
+            dados_painel.append({
+                "Nº Processo Principal": pm.get("numero_processo_principal"),
+                "Cliente": cli_m['nome_razao'] if cli_m else 'N/A',
+                "Endereço Empreendimento": pm.get("endereco_empreendimento"),
+                "Serviço Contratado": pm.get("servico_contratado"),
+                "Responsável": pm.get("responsavel_principal"),
+                "Status": pm.get("status"),
+                "Qtd. Subprocessos Vinculados": qnt_subs
+            })
+        st.dataframe(pd.DataFrame(dados_painel), use_container_width=True)
+    else:
+        st.info("Nenhum Processo Principal cadastrado para exibição neste painel.")
+
+# ------------------------------------------------------------------------------
+# 11. RELATÓRIOS EXPORTÁVEIS COM FILTROS
+# ------------------------------------------------------------------------------
+elif menu == "Relatórios":
+    st.subheader("Exportação de Relatórios Personalizados")
+    
+    tipo_relatorio = st.radio("Escolha o Escopo do Relatório para Download:", [
+        "1. Relatório Geral Completo (Todos os Clientes, Endereços, Processos e Taxas)",
+        "2. Relatório Filtrado por 1 Único Cliente (Tudo do Cliente)",
+        "3. Relatório Filtrado por 1 Único Endereço / Empreendimento"
+    ])
+    
+    procs = get_processos_principais()
+    subs = get_subprocessos()
+    fin = get_financeiro()
+    clis = get_clientes()
+
+    if tipo_relatorio.startswith("1"):
+        if procs:
+            df_export = pd.DataFrame(procs)
+            st.dataframe(df_export, use_container_width=True)
+            st.download_button("📥 Baixar Relatório Geral Completo (CSV)", df_export.to_csv(index=False).encode('utf-8'), "relatorio_geral_b2x.csv", "text/csv")
+        else:
+            st.info("Sem dados para exportar.")
+
+    elif tipo_relatorio.startswith("2"):
+        if clis:
+            dict_c_rel = {c["id"]: c["nome_razao"] for c in clis}
+            c_rel_id = st.selectbox("Selecione o Cliente Desejado:", list(dict_c_rel.keys()), format_func=lambda x: dict_c_rel[x])
+            procs_c = [p for p in procs if p.get("cliente_id") == c_rel_id]
+            
+            if procs_c:
+                df_rel_c = pd.DataFrame(procs_c)
+                st.dataframe(df_rel_c, use_container_width=True)
+                st.download_button("📥 Baixar Relatório do Cliente (CSV)", df_rel_c.to_csv(index=False).encode('utf-8'), f"relatorio_cliente_{c_rel_id}.csv", "text/csv")
+            else:
+                st.info("Este cliente não possui processos cadastrados.")
+
+    elif tipo_relatorio.startswith("3"):
+        todos_ends = list(set([p.get("endereco_empreendimento") for p in procs if p.get("endereco_empreendimento")]))
+        if todos_ends:
+            end_sel_rel = st.selectbox("Selecione o Endereço / Obra Desejada:", todos_ends)
+            procs_end = [p for p in procs if p.get("endereco_empreendimento") == end_sel_rel]
+            
+            if procs_end:
+                df_rel_e = pd.DataFrame(procs_end)
+                st.dataframe(df_rel_e, use_container_width=True)
+                st.download_button("📥 Baixar Relatório do Endereço (CSV)", df_rel_e.to_csv(index=False).encode('utf-8'), "relatorio_endereco.csv", "text/csv")
+        else:
+            st.info("Sem endereços cadastrados.")
