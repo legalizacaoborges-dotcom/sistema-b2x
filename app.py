@@ -474,19 +474,3 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
                     st.rerun()
                 else:
                     st.error("Informe o Número do Processo Principal.")
-    else:
-        st.warning("Cadastre um cliente primeiro no módulo 'Cadastro de Clientes'.")
-
-# ------------------------------------------------------------------------------
-# 5. FILA INDIVIDUAL
-# ------------------------------------------------------------------------------
-elif menu == "Fila Individual":
-    st.subheader("Fila de Trabalho por Integrante")
-    user_sel = st.selectbox("Selecionar Integrante:", list(st.session_state.equipe.keys()))
-    
-    subs_meus = [s for s in st.session_state.subprocessos if s.get("responsavel_sub") == user_sel]
-    principais_meus = [p for p in st.session_state.processos_principais if p.get("responsavel_principal") == user_sel]
-    
-    st.markdown(f"##### Processos Principais sob Responsabilidade de {user_sel} ({len(principais_meus)})")
-    for pm in principais_meus:
-        st.info(f"**Nº Processo Principal:** {pm['numero_processo_principal']} | **Cliente:** {pm['cliente_nome']} | **Endereço:** {pm
