@@ -4,7 +4,7 @@ from datetime import datetime, date
 from streamlit_gsheets import GSheetsConnection
 import os
 
-# Configuração do Layout
+# Configuração de Layout
 st.set_page_config(
     page_title="B2x Arquitetura - Gestão Processual & Financeira",
     layout="wide",
@@ -145,6 +145,11 @@ if "subprocessos" not in st.session_state:
         }
     ]
 
+# Garantir compatibilidade de chaves nos subprocessos antigos
+for sub in st.session_state.subprocessos:
+    if "processo_principal_id" not in sub and "processo_mae_id" in sub:
+        sub["processo_principal_id"] = sub["processo_mae_id"]
+
 # 6. Financeiro
 if "financeiro" not in st.session_state:
     st.session_state.financeiro = [
@@ -223,7 +228,7 @@ if menu == "Dashboard Executivo":
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         st.markdown("##### Processos Principais por Status")
-        if not df_p.empty:
+        if not df_p.empty and "status" in df_p.columns:
             status_counts = df_p["status"].value_counts().reset_index()
             status_counts.columns = ["Status", "Quantidade"]
             st.bar_chart(status_counts.set_index("Status"))
@@ -232,7 +237,7 @@ if menu == "Dashboard Executivo":
 
     with col_g2:
         st.markdown("##### Subprocessos por Órgão Restritivo")
-        if not df_sub.empty:
+        if not df_sub.empty and "orgao_subprocesso" in df_sub.columns:
             sub_counts = df_sub["orgao_subprocesso"].value_counts().reset_index()
             sub_counts.columns = ["Órgão", "Quantidade"]
             st.bar_chart(sub_counts.set_index("Órgão"))
@@ -376,7 +381,7 @@ elif menu == "Gestão de Subprocessos":
                 st.markdown(f"#### 🏢 Processo Principal: `{pm['numero_processo_principal']}` — {pm['cliente_nome']}")
                 st.write(f"**Empreendimento:** {pm['endereco_empreendimento']} | **Responsável:** {pm['responsavel_principal']}")
                 
-                subs_do_p = [s for s in st.session_state.subprocessos if s["processo_principal_id"] == pm["id"]]
+                subs_do_p = [s for s in st.session_state.subprocessos if s.get("processo_principal_id", s.get("processo_mae_id")) == pm["id"]]
                 
                 if subs_do_p:
                     for sub in subs_do_p:
@@ -388,12 +393,13 @@ elif menu == "Gestão de Subprocessos":
                             col_s1, col_s2 = st.columns(2)
                             with col_s1:
                                 st.markdown("###### Descrição do Subprocesso")
-                                st.write(sub['descricao_exigencia'] if sub['descricao_exigencia'] else "Sem descrição cadastrada.")
+                                st.write(sub.get('descricao_exigencia', 'Sem descrição cadastrada.'))
                                 st.write(f"**Data de Início:** {sub['data_inicio'].strftime('%d/%m/%Y') if sub.get('data_inicio') else 'N/A'}")
                                 st.write(f"**Prazo Limite:** {sub['prazo_fim'].strftime('%d/%m/%Y') if sub.get('prazo_fim') else 'N/A'}")
                             
                             with col_s2:
-                                idx_st = ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"].index(sub['status']) if sub['status'] in ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"] else 0
+                                status_sub_atual = sub.get('status', 'Em Tramitação')
+                                idx_st = ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"].index(status_sub_atual) if status_sub_atual in ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"] else 0
                                 novo_st_sub = st.selectbox("Status do Subprocesso", ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"], index=idx_st, key=f"st_sub_{sub['id']}")
                                 if st.button("Atualizar Status", key=f"btn_st_sub_{sub['id']}"):
                                     sub["status"] = novo_st_sub
@@ -436,6 +442,8 @@ elif menu == "Gestão de Subprocessos":
                             novo_despacho_txt = st.text_input("Novo Despacho Oficial / Parecer:", key=f"txt_desp_{sub['id']}")
                             if st.button("Inserir Despacho", key=f"btn_desp_{sub['id']}"):
                                 if novo_despacho_txt.strip() != "":
+                                    if "despachos" not in sub:
+                                        sub["despachos"] = []
                                     sub["despachos"].append({
                                         "data": date.today().strftime("%Y-%m-%d"),
                                         "texto": novo_despacho_txt.strip()
@@ -489,14 +497,14 @@ elif menu == "Painel Geral de Processos":
                     st.write(f"**Status Principal:** `{pm['status']}`")
                     st.write(f"**Prazo Validade:** {pm['prazo_limite'].strftime('%d/%m/%Y') if pm.get('prazo_limite') else 'N/A'}")
 
-                subs = [s for s in st.session_state.subprocessos if s["processo_principal_id"] == pm["id"]]
+                subs = [s for s in st.session_state.subprocessos if s.get("processo_principal_id", s.get("processo_mae_id")) == pm["id"]]
                 st.markdown(f"###### Subprocessos / Restrições Vinculadas ({len(subs)})")
                 for sb in subs:
                     st.info(f"**Órgão:** {sb['orgao_subprocesso']} | **Nº:** {sb['numero_subprocesso']} | **Resp:** {sb['responsavel_sub']} | **Status:** `{sb['status']}`")
 
                 if st.button(f"🚨 Excluir Processo Principal e Subprocessos", key=f"del_pm_{pm['id']}", type="primary"):
                     st.session_state.processos_principais = [p for p in st.session_state.processos_principais if p["id"] != pm["id"]]
-                    st.session_state.subprocessos = [s for s in st.session_state.subprocessos if s["processo_principal_id"] != pm["id"]]
+                    st.session_state.subprocessos = [s for s in st.session_state.subprocessos if s.get("processo_principal_id", s.get("processo_mae_id")) != pm["id"]]
                     salvar_dados(pd.DataFrame(st.session_state.processos_principais), "Processos_Principais")
                     salvar_dados(pd.DataFrame(st.session_state.subprocessos), "Subprocessos")
                     st.success("Removidos da nuvem com sucesso!")
@@ -600,7 +608,7 @@ elif menu == "Busca Integrada (Lupa 360°)":
             
             for pmc in procs_p_cli:
                 st.info(f"**Processo Principal:** {pmc['numero_processo_principal']} | **Empreendimento:** {pmc['endereco_empreendimento']} | **Status:** `{pmc['status']}`")
-                subs_cli = [s for s in st.session_state.subprocessos if s["processo_principal_id"] == pmc["id"]]
+                subs_cli = [s for s in st.session_state.subprocessos if s.get("processo_principal_id", s.get("processo_mae_id")) == pmc["id"]]
                 for sc in subs_cli:
                     st.write(f" └─ **Subprocesso ({sc['orgao_subprocesso']}):** {sc['numero_subprocesso']} — Status: `{sc['status']}`")
 
@@ -737,8 +745,8 @@ elif menu == "Fila Individual":
     st.subheader("Fila de Trabalho por Integrante")
     user_sel = st.selectbox("Selecionar Integrante:", list(st.session_state.equipe.keys()))
     
-    subs_meus = [s for s in st.session_state.subprocessos if s["responsavel_sub"] == user_sel]
-    principais_meus = [p for p in st.session_state.processos_principais if p["responsavel_principal"] == user_sel]
+    subs_meus = [s for s in st.session_state.subprocessos if s.get("responsavel_sub") == user_sel]
+    principais_meus = [p for p in st.session_state.processos_principais if p.get("responsavel_principal") == user_sel]
     
     st.markdown(f"##### Processos Principais sob Responsabilidade de {user_sel} ({len(principais_meus)})")
     for pm in principais_meus:
@@ -746,7 +754,7 @@ elif menu == "Fila Individual":
         
     st.markdown(f"##### Subprocessos / Exigências sob Responsabilidade de {user_sel} ({len(subs_meus)})")
     for sm in subs_meus:
-        st.warning(f"**Órgão:** {sm['orgao_subprocesso']} | **Nº:** {sm['numero_subprocesso']} | **Exigência:** {sm['descricao_exigencia']} | **Status:** {sm['status']}")
+        st.warning(f"**Órgão:** {sm['orgao_subprocesso']} | **Nº:** {sm['numero_subprocesso']} | **Exigência:** {sm.get('descricao_exigencia', 'Sem descrição')} | **Status:** {sm['status']}")
 
 # ------------------------------------------------------------------------------
 # 11. RELATÓRIOS
@@ -754,7 +762,7 @@ elif menu == "Fila Individual":
 elif menu == "Relatórios":
     st.subheader("Exportação de Dados Consolidados")
     df_m = pd.DataFrame(st.session_state.processos_principais)
-    if not df_m.empty:
+    if not df_m.empty and "numero_processo_principal" in df_m.columns:
         st.dataframe(df_m[["numero_processo_principal", "cliente_nome", "endereco_empreendimento", "servico_contratado", "responsavel_principal", "status"]], use_container_width=True)
         csv_data = df_m.to_csv(index=False).encode('utf-8')
         st.download_button("Exportar Processos Principais (CSV)", data=csv_data, file_name="relatorio_processos_principais_b2x.csv", mime="text/csv")
