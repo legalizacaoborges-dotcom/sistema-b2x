@@ -148,7 +148,6 @@ if len(st.session_state.subprocessos) == 0:
         }
     ]
 
-# Garantir compatibilidade de chaves nos subprocessos
 for sub in st.session_state.subprocessos:
     if "processo_principal_id" not in sub and "processo_mae_id" in sub:
         sub["processo_principal_id"] = sub["processo_mae_id"]
@@ -320,4 +319,110 @@ elif menu == "Cadastro de Clientes":
 
     with tab_cli2:
         if st.session_state.clientes:
-            st.markdown("##### Alterar Dados e Incluir Novos Endereços de Obra/
+            st.markdown("##### Alterar Dados e Incluir Novos Endereços de Obra / Empreendimento")
+            cli_edit_nome = st.selectbox("Selecione o Cliente para Editar:", [c["nome_razao"] for c in st.session_state.clientes], key="sel_cli_edit")
+            cli_edit_obj = next((c for c in st.session_state.clientes if c["nome_razao"] == cli_edit_nome), None)
+
+            if cli_edit_obj:
+                with st.form("form_editar_cliente"):
+                    c_e1, c_e2 = st.columns(2)
+                    with c_e1:
+                        edit_nome_raz = st.text_input("Razão Social / Nome Completo", value=cli_edit_obj.get("nome_razao", ""))
+                        edit_cpf_cnpj = st.text_input("CPF / CNPJ", value=cli_edit_obj.get("cpf_cnpj", ""))
+                        edit_rep_legal = st.text_input("Representante Legal", value=cli_edit_obj.get("representante_legal", ""))
+                    with c_e2:
+                        edit_num_prop = st.text_input("Número da Proposta", value=cli_edit_obj.get("numero_proposta", ""))
+                        edit_num_cont = st.text_input("Número do Contrato", value=cli_edit_obj.get("numero_contrato", ""))
+                        edit_end_cli = st.text_input("Endereço Comercial / Sede", value=cli_edit_obj.get("endereco_cliente", ""))
+
+                    st.markdown("---")
+                    st.markdown("###### 🏢 Endereços de Empreendimentos / Obras Cadastrados:")
+                    for idx_end, end_atual in enumerate(cli_edit_obj.get("enderecos_empreendimentos", [])):
+                        st.write(f"• **Endereço {idx_end + 1}:** {end_atual}")
+
+                    novo_end_incluir = st.text_input("➕ Adicionar Novo Endereço de Empreendimento / Obra:")
+
+                    btn_salvar_edicao = st.form_submit_button("Atualizar Cadastro e Endereços")
+
+                    if btn_salvar_edicao:
+                        cli_edit_obj["nome_razao"] = edit_nome_raz
+                        cli_edit_obj["cpf_cnpj"] = edit_cpf_cnpj
+                        cli_edit_obj["representante_legal"] = edit_rep_legal
+                        cli_edit_obj["numero_proposta"] = edit_num_prop
+                        cli_edit_obj["numero_contrato"] = edit_num_cont
+                        cli_edit_obj["endereco_cliente"] = edit_end_cli
+
+                        if novo_end_incluir.strip():
+                            if "enderecos_empreendimentos" not in cli_edit_obj:
+                                cli_edit_obj["enderecos_empreendimentos"] = []
+                            cli_edit_obj["enderecos_empreendimentos"].append(novo_end_incluir.strip())
+
+                        salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                        st.success("Cadastro atualizado com sucesso!")
+                        st.rerun()
+        else:
+            st.info("Nenhum cliente cadastrado no momento.")
+
+    with tab_cli3:
+        if st.session_state.clientes:
+            cli_excluir = st.selectbox("Selecione o Cliente para Excluir:", [c["nome_razao"] for c in st.session_state.clientes], key="sel_cli_del")
+            if st.button(f"🚨 Excluir Cliente '{cli_excluir}'", type="primary"):
+                st.session_state.clientes = [c for c in st.session_state.clientes if c["nome_razao"] != cli_excluir]
+                salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                st.success("Cliente removido com sucesso!")
+                st.rerun()
+        else:
+            st.info("Nenhum cliente cadastrado no momento.")
+
+    st.divider()
+    st.markdown("##### Base Geral de Clientes")
+    df_cli_view = pd.DataFrame(st.session_state.clientes)
+    if not df_cli_view.empty:
+        st.dataframe(df_cli_view[["id", "tipo_pessoa", "nome_razao", "cpf_cnpj", "numero_proposta", "numero_contrato"]], use_container_width=True)
+    else:
+        st.info("Nenhum cliente na base de dados.")
+
+# ------------------------------------------------------------------------------
+# 3. DASHBOARD EXECUTIVO
+# ------------------------------------------------------------------------------
+elif menu == "Dashboard Executivo":
+    st.subheader("Painel Geral de Acompanhamento (Sincronizado na Nuvem)")
+    
+    df_p = pd.DataFrame(st.session_state.processos_principais)
+    df_sub = pd.DataFrame(st.session_state.subprocessos)
+    df_fin = pd.DataFrame(st.session_state.financeiro)
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Clientes Cadastrados", len(st.session_state.clientes))
+    c2.metric("Processos Principais", len(df_p))
+    c3.metric("Subprocessos / Restrições", len(df_sub))
+    
+    total_pendente_fin = df_fin[df_fin["status_pagamento"] == "Pendente"]["valor"].sum() if not df_fin.empty and "status_pagamento" in df_fin.columns else 0.0
+    c4.metric("Taxas Pendentes (R$)", f"R$ {total_pendente_fin:,.2f}")
+
+    st.divider()
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown("##### Processos Principais por Status")
+        if not df_p.empty and "status" in df_p.columns:
+            status_counts = df_p["status"].value_counts().reset_index()
+            status_counts.columns = ["Status", "Quantidade"]
+            st.bar_chart(status_counts.set_index("Status"))
+        else:
+            st.info("Nenhum processo cadastrado para exibição do gráfico.")
+
+    with col_g2:
+        st.markdown("##### Subprocessos por Órgão Restritivo")
+        if not df_sub.empty and "orgao_subprocesso" in df_sub.columns:
+            sub_counts = df_sub["orgao_subprocesso"].value_counts().reset_index()
+            sub_counts.columns = ["Órgão", "Quantidade"]
+            st.bar_chart(sub_counts.set_index("Órgão"))
+        else:
+            st.info("Nenhum subprocesso cadastrado para exibição do gráfico.")
+
+# ------------------------------------------------------------------------------
+# 4. ENTRADA PROCESSO PRINCIPAL
+# ------------------------------------------------------------------------------
+elif menu == "Entrada Processo Principal (LICIN/SMDU)":
+    st.subheader("Cadastro e Edição de Processos Principais (SMDU / LICIN / SEI.RIO)")
