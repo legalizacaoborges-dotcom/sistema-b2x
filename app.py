@@ -306,4 +306,164 @@ elif menu == "Cadastro de Clientes":
     with tab_cli2:
         if st.session_state.clientes:
             st.markdown("##### Alterar Dados e Incluir Novos Endereços de Obra/Empreendimento")
-            cli_edit_nome = st.selectbox("Selecione
+            cli_edit_nome = st.selectbox("Selecione o Cliente para Editar:", [c["nome_razao"] for c in st.session_state.clientes], key="sel_cli_edit")
+            cli_edit_obj = next((c for c in st.session_state.clientes if c["nome_razao"] == cli_edit_nome), None)
+
+            if cli_edit_obj:
+                with st.form("form_editar_cliente"):
+                    c_e1, c_e2 = st.columns(2)
+                    with c_e1:
+                        edit_nome_raz = st.text_input("Razão Social / Nome Completo", value=cli_edit_obj.get("nome_razao", ""))
+                        edit_cpf_cnpj = st.text_input("CPF / CNPJ", value=cli_edit_obj.get("cpf_cnpj", ""))
+                        edit_rep_legal = st.text_input("Representante Legal", value=cli_edit_obj.get("representante_legal", ""))
+                    with c_e2:
+                        edit_num_prop = st.text_input("Número da Proposta", value=cli_edit_obj.get("numero_proposta", ""))
+                        edit_num_cont = st.text_input("Número do Contrato", value=cli_edit_obj.get("numero_contrato", ""))
+                        edit_end_cli = st.text_input("Endereço Comercial / Sede", value=cli_edit_obj.get("endereco_cliente", ""))
+
+                    st.markdown("---")
+                    st.markdown("###### 🏢 Endereços de Empreendimentos / Obras Cadastrados:")
+                    for idx_end, end_atual in enumerate(cli_edit_obj.get("enderecos_empreendimentos", [])):
+                        st.write(f"• **Endereço {idx_end + 1}:** {end_atual}")
+
+                    novo_end_incluir = st.text_input("➕ Adicionar Novo Endereço de Empreendimento / Obra:")
+
+                    btn_salvar_edicao = st.form_submit_button("Atualizar Cadastro e Endereços na Nuvem")
+
+                    if btn_salvar_edicao:
+                        cli_edit_obj["nome_razao"] = edit_nome_raz
+                        cli_edit_obj["cpf_cnpj"] = edit_cpf_cnpj
+                        cli_edit_obj["representante_legal"] = edit_rep_legal
+                        cli_edit_obj["numero_proposta"] = edit_num_prop
+                        cli_edit_obj["numero_contrato"] = edit_num_cont
+                        cli_edit_obj["endereco_cliente"] = edit_end_cli
+
+                        if novo_end_incluir.strip():
+                            if "enderecos_empreendimentos" not in cli_edit_obj:
+                                cli_edit_obj["enderecos_empreendimentos"] = []
+                            cli_edit_obj["enderecos_empreendimentos"].append(novo_end_incluir.strip())
+
+                        salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                        st.success("Cadastro do cliente e endereços atualizados com sucesso!")
+                        st.rerun()
+        else:
+            st.info("Nenhum cliente cadastrado no momento.")
+
+    with tab_cli3:
+        if st.session_state.clientes:
+            cli_excluir = st.selectbox("Selecione o Cliente para Excluir:", [c["nome_razao"] for c in st.session_state.clientes], key="sel_cli_del")
+            if st.button(f"🚨 Excluir Cliente '{cli_excluir}'", type="primary"):
+                st.session_state.clientes = [c for c in st.session_state.clientes if c["nome_razao"] != cli_excluir]
+                salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                st.success("Cliente removido da nuvem!")
+                st.rerun()
+        else:
+            st.info("Nenhum cliente cadastrado no momento.")
+
+    st.divider()
+    st.markdown("##### Base Geral de Clientes")
+    df_cli_view = pd.DataFrame(st.session_state.clientes)
+    if not df_cli_view.empty:
+        st.dataframe(df_cli_view[["id", "tipo_pessoa", "nome_razao", "cpf_cnpj", "numero_proposta", "numero_contrato"]], use_container_width=True)
+
+# ------------------------------------------------------------------------------
+# 3. DASHBOARD EXECUTIVO
+# ------------------------------------------------------------------------------
+elif menu == "Dashboard Executivo":
+    st.subheader("Painel Geral de Acompanhamento (Sincronizado na Nuvem)")
+    
+    df_p = pd.DataFrame(st.session_state.processos_principais)
+    df_sub = pd.DataFrame(st.session_state.subprocessos)
+    df_fin = pd.DataFrame(st.session_state.financeiro)
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Clientes Cadastrados", len(st.session_state.clientes))
+    c2.metric("Processos Principais (SMDU/LICIN)", len(df_p))
+    c3.metric("Subprocessos / Restrições", len(df_sub))
+    
+    total_pendente_fin = df_fin[df_fin["status_pagamento"] == "Pendente"]["valor"].sum() if not df_fin.empty else 0.0
+    c4.metric("Taxas Pendentes (R$)", f"R$ {total_pendente_fin:,.2f}")
+
+    st.divider()
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown("##### Processos Principais por Status")
+        if not df_p.empty and "status" in df_p.columns:
+            status_counts = df_p["status"].value_counts().reset_index()
+            status_counts.columns = ["Status", "Quantidade"]
+            st.bar_chart(status_counts.set_index("Status"))
+        else:
+            st.info("Nenhum processo cadastrado para exibição do gráfico.")
+
+    with col_g2:
+        st.markdown("##### Subprocessos por Órgão Restritivo")
+        if not df_sub.empty and "orgao_subprocesso" in df_sub.columns:
+            sub_counts = df_sub["orgao_subprocesso"].value_counts().reset_index()
+            sub_counts.columns = ["Órgão", "Quantidade"]
+            st.bar_chart(sub_counts.set_index("Órgão"))
+        else:
+            st.info("Nenhum subprocesso cadastrado para exibição do gráfico.")
+
+# ------------------------------------------------------------------------------
+# 4. ENTRADA PROCESSO PRINCIPAL
+# ------------------------------------------------------------------------------
+elif menu == "Entrada Processo Principal (LICIN/SMDU)":
+    st.subheader("Cadastro e Edição de Processos Principais (SMDU / LICIN / SEI.RIO)")
+    
+    tab_p1, tab_p2 = st.tabs(["➕ Cadastrar Novo Processo", "✏️ Editar Processo Existente"])
+    
+    lista_clientes_nomes = [c["nome_razao"] for c in st.session_state.clientes] if st.session_state.clientes else []
+    lista_equipe_nomes = list(st.session_state.equipe.keys())
+
+    with tab_p1:
+        if lista_clientes_nomes:
+            with st.form("form_processo_principal"):
+                st.markdown("##### Identificação do Cliente e Endereço do Empreendimento")
+                c_pm1, c_pm2 = st.columns(2)
+                
+                with c_pm1:
+                    cliente_sel_nome = st.selectbox("Cliente Cadastrado *", lista_clientes_nomes)
+                    cliente_obj = next(c for c in st.session_state.clientes if c["nome_razao"] == cliente_sel_nome)
+                    
+                    end_opcoes = cliente_obj.get("enderecos_empreendimentos", []) + ["+ Adicionar Novo Endereço para este Cliente"]
+                    end_sel = st.selectbox("Endereço do Empreendimento / Obra *", end_opcoes)
+                    
+                    if end_sel == "+ Adicionar Novo Endereço para este Cliente":
+                        novo_end_input = st.text_input("Digite o Novo Endereço do Empreendimento:")
+                    else:
+                        novo_end_input = end_sel
+
+                with c_pm2:
+                    num_proc_p = st.text_input("Nº do Processo Principal (SMDU/LICIN/SEI.RIO) *", placeholder="Ex: 04/001.234/2026")
+                    servico_p = st.text_input("Serviço Contratado *", placeholder="Ex: Licença de Obra / Habite-se")
+
+                st.markdown("##### Atribuição e Prazos")
+                c_pm3, c_pm4 = st.columns(2)
+                with c_pm3:
+                    resp_p = st.selectbox("Responsável pelo Processo Principal *", lista_equipe_nomes)
+                    data_inc_p = st.date_input("Data de Início do Processo", value=date.today())
+                with c_pm4:
+                    prazo_p = st.date_input("Prazo Limite / Validade da Licença", value=None)
+                    status_p_init = st.selectbox("Status Inicial", STATUS_OPCOES, index=2)
+
+                btn_salvar_p = st.form_submit_button("Cadastrar e Sincronizar Processo Principal")
+                
+                if btn_salvar_p:
+                    if num_proc_p.strip() != "":
+                        if end_sel == "+ Adicionar Novo Endereço para este Cliente" and novo_end_input.strip() != "":
+                            if "enderecos_empreendimentos" not in cliente_obj:
+                                cliente_obj["enderecos_empreendimentos"] = []
+                            cliente_obj["enderecos_empreendimentos"].append(novo_end_input.strip())
+                        
+                        end_final = novo_end_input.strip() if novo_end_input.strip() != "" else end_sel
+                        
+                        novo_id_p = max([p["id"] for p in st.session_state.processos_principais], default=0) + 1
+                        st.session_state.processos_principais.append({
+                            "id": novo_id_p,
+                            "cliente_id": cliente_obj["id"],
+                            "cliente_nome": cliente_obj["nome_razao"],
+                            "numero_processo_principal": num_proc_p,
+                            "endereco_empreendimento": end_final,
+                            "servico_contratado": servico_p,
+                            "responsavel_principal": resp_p,
