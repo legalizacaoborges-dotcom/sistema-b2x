@@ -296,3 +296,52 @@ elif menu == "Cadastro de Clientes":
     tab_cli1, tab_cli2, tab_cli3 = st.tabs(["➕ Cadastrar Novo Cliente", "✏️ Editar Cadastro & Adicionar Endereços", "🗑️ Excluir Cliente"])
     
     with tab_cli1:
+        with st.form("form_novo_cliente"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                tipo_p = st.selectbox("Tipo de Pessoa *", ["Pessoa Jurídica", "Pessoa Física"])
+                nome_raz = st.text_input("Nome Completo ou Razão Social *")
+                cpf_cnpj = st.text_input("CPF ou CNPJ *")
+                rep_legal = st.text_input("Nome do Representante Legal (para PJ)")
+
+            with col_c2:
+                num_prop = st.text_input("Número da Proposta Comercial")
+                num_cont = st.text_input("Número do Contrato")
+                end_cli = st.text_input("Endereço Comercial / Sede")
+                end_emp_inicial = st.text_input("Endereço do 1º Empreendimento / Obra *")
+
+            if st.form_submit_button("Salvar Cliente"):
+                if nome_raz.strip() != "":
+                    ends_json = json.dumps([end_emp_inicial] if end_emp_inicial else [])
+                    run_query("""
+                        INSERT INTO clientes (tipo_pessoa, nome_razao, cpf_cnpj, representante_legal, endereco_cliente, enderecos_empreendimentos, numero_proposta, numero_contrato, data_inicio)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (tipo_p, nome_raz, cpf_cnpj, rep_legal, end_cli, ends_json, num_prop, num_cont, str(date.today())), fetchall=False)
+                    st.success("Cliente cadastrado com sucesso!")
+                    st.rerun()
+
+    with tab_cli2:
+        clis = get_clientes()
+        if clis:
+            map_cli = {c["id"]: c["nome_razao"] for c in clis}
+            cli_edit_id = st.selectbox("Selecione o Cliente para Editar:", list(map_cli.keys()), format_func=lambda x: map_cli[x])
+            cli_edit_obj = get_cliente_por_id(cli_edit_id)
+
+            if cli_edit_obj:
+                with st.form("form_editar_cliente"):
+                    c_e1, c_e2 = st.columns(2)
+                    with c_e1:
+                        edit_nome_raz = st.text_input("Razão Social / Nome Completo", value=cli_edit_obj.get("nome_razao", ""))
+                        edit_cpf_cnpj = st.text_input("CPF / CNPJ", value=cli_edit_obj.get("cpf_cnpj", ""))
+                        edit_rep_legal = st.text_input("Representante Legal", value=cli_edit_obj.get("representante_legal", ""))
+                    with c_e2:
+                        edit_num_prop = st.text_input("Número da Proposta", value=cli_edit_obj.get("numero_proposta", ""))
+                        edit_num_cont = st.text_input("Número do Contrato", value=cli_edit_obj.get("numero_contrato", ""))
+                        edit_end_cli = st.text_input("Endereço Comercial / Sede", value=cli_edit_obj.get("endereco_cliente", ""))
+
+                    st.markdown("---")
+                    st.markdown("###### 🏢 Endereços de Empreendimentos Cadastrados:")
+                    ends = cli_edit_obj.get("enderecos_empreendimentos", [])
+                    if isinstance(ends, list):
+                        for idx_end, end_atual in enumerate(ends):
+                            st.
