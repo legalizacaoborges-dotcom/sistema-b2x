@@ -99,6 +99,21 @@ def init_db():
         anexo_comprovante_nome TEXT
     )""")
     
+    # Migração segura para garantir colunas em bancos legados
+    colunas_novas = [
+        ("financeiro", "anexo_boleto_nome", "TEXT"),
+        ("financeiro", "anexo_comprovante_nome", "TEXT"),
+        ("processos_principais", "numero_licenca", "TEXT"),
+        ("processos_principais", "numero_despacho", "TEXT"),
+        ("processos_principais", "vencimento_licenca", "TEXT"),
+        ("subprocessos", "numero_despacho", "TEXT")
+    ]
+    for tabela, coluna, tipo in colunas_novas:
+        try:
+            c.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
+        except Exception:
+            pass
+
     c.execute("SELECT COUNT(*) FROM clientes")
     if c.fetchone()[0] == 0:
         c.execute("""INSERT INTO clientes (id, tipo_pessoa, nome_razao, cpf_cnpj, representante_legal, endereco_cliente, enderecos_empreendimentos, numero_proposta, numero_contrato, emite_nf, valor_global, forma_pagamento, status_quitacao, data_inicio)
@@ -251,7 +266,10 @@ if menu == "Busca Integrada (Lupa 360°)":
             fin = [f for f in get_financeiro() if f.get("cliente_id") == cliente_obj["id"]]
             st.markdown(f"##### 💰 Lançamentos Financeiros & Boletos ({len(fin)})")
             if fin:
-                st.dataframe(pd.DataFrame(fin)[["tipo_documento", "numero_documento", "descricao", "valor", "vencimento", "pagador", "status_pagamento", "anexo_boleto_nome", "anexo_comprovante_nome"]], use_container_width=True)
+                df_fin_c = pd.DataFrame(fin)
+                colunas_desejadas = ["tipo_documento", "numero_documento", "descricao", "valor", "vencimento", "pagador", "status_pagamento", "anexo_boleto_nome", "anexo_comprovante_nome"]
+                cols_f = [c for c in colunas_desejadas if c in df_fin_c.columns]
+                st.dataframe(df_fin_c[cols_f], use_container_width=True)
             else:
                 st.info("Nenhum lançamento financeiro para este cliente.")
 
@@ -346,7 +364,9 @@ elif menu == "Cadastro de Clientes":
                 st.rerun()
 
     st.divider()
-    st.dataframe(run_df("SELECT id, tipo_pessoa, nome_razao, cpf_cnpj, emite_nf, valor_global, status_quitacao FROM clientes"), use_container_width=True)
+    df_cli_base = run_df("SELECT * FROM clientes")
+    cols_base = [c for c in ["id", "tipo_pessoa", "nome_razao", "cpf_cnpj", "emite_nf", "valor_global", "status_quitacao"] if c in df_cli_base.columns]
+    st.dataframe(df_cli_base[cols_base], use_container_width=True)
 
 # ------------------------------------------------------------------------------
 # 3. DASHBOARD EXECUTIVO
@@ -361,7 +381,7 @@ elif menu == "Dashboard Executivo":
     c1.metric("Clientes Cadastrados", len(get_clientes()))
     c2.metric("Processos Principais", len(df_p))
     c3.metric("Subprocessos / Restrições", len(df_sub))
-    total_pendente = df_fin[df_fin["status_pagamento"] == "Pendente"]["valor"].sum() if not df_fin.empty else 0.0
+    total_pendente = df_fin[df_fin["status_pagamento"] == "Pendente"]["valor"].sum() if not df_fin.empty and "status_pagamento" in df_fin.columns else 0.0
     c4.metric("Taxas Pendentes (R$)", f"R$ {total_pendente:,.2f}")
 
     st.divider()
@@ -718,32 +738,4 @@ elif menu == "Relatórios":
         if procs:
             df_export = pd.DataFrame(procs)
             st.dataframe(df_export, use_container_width=True)
-            st.download_button("📥 Baixar Relatório Geral Completo (CSV)", df_export.to_csv(index=False).encode('utf-8'), "relatorio_geral_b2x.csv", "text/csv")
-        else:
-            st.info("Sem dados para exportar.")
-
-    elif tipo_relatorio.startswith("2"):
-        if clis:
-            dict_c_rel = {c["id"]: c["nome_razao"] for c in clis}
-            c_rel_id = st.selectbox("Selecione o Cliente Desejado:", list(dict_c_rel.keys()), format_func=lambda x: dict_c_rel[x])
-            procs_c = [p for p in procs if p.get("cliente_id") == c_rel_id]
-            
-            if procs_c:
-                df_rel_c = pd.DataFrame(procs_c)
-                st.dataframe(df_rel_c, use_container_width=True)
-                st.download_button("📥 Baixar Relatório do Cliente (CSV)", df_rel_c.to_csv(index=False).encode('utf-8'), f"relatorio_cliente_{c_rel_id}.csv", "text/csv")
-            else:
-                st.info("Este cliente não possui processos cadastrados.")
-
-    elif tipo_relatorio.startswith("3"):
-        todos_ends = list(set([p.get("endereco_empreendimento") for p in procs if p.get("endereco_empreendimento")]))
-        if todos_ends:
-            end_sel_rel = st.selectbox("Selecione o Endereço / Obra Desejada:", todos_ends)
-            procs_end = [p for p in procs if p.get("endereco_empreendimento") == end_sel_rel]
-            
-            if procs_end:
-                df_rel_e = pd.DataFrame(procs_end)
-                st.dataframe(df_rel_e, use_container_width=True)
-                st.download_button("📥 Baixar Relatório do Endereço (CSV)", df_rel_e.to_csv(index=False).encode('utf-8'), "relatorio_endereco.csv", "text/csv")
-        else:
-            st.info("Sem endereços cadastrados.")
+            st.download_button("
