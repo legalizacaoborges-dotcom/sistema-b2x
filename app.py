@@ -251,3 +251,37 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
             
             with c_pm1:
                 cliente_sel_nome = st.selectbox("Cliente Cadastrado *", lista_clientes_nomes)
+                cliente_obj = next(c for c in st.session_state.clientes if c["nome_razao"] == cliente_sel_nome)
+                
+                end_opcoes = cliente_obj["enderecos_empreendimentos"] + ["+ Adicionar Novo Endereço para este Cliente"]
+                end_sel = st.selectbox("Endereço do Empreendimento / Obra *", end_opcoes)
+                
+                if end_sel == "+ Adicionar Novo Endereço para este Cliente":
+                    novo_end_input = st.text_input("Digite o Novo Endereço do Empreendimento:")
+                else:
+                    novo_end_input = end_sel
+
+            with c_pm2:
+                num_proc_p = st.text_input("Nº do Processo Principal (SMDU/LICIN/SEI.RIO) *", placeholder="Ex: 04/001.234/2026")
+                servico_p = st.text_input("Serviço Contratado *", placeholder="Ex: Licença de Obra / Habite-se")
+
+            st.markdown("##### 2. Atribuição e Prazos")
+            c_pm3, c_pm4 = st.columns(2)
+            with c_pm3:
+                resp_p = st.selectbox("Responsável pelo Processo Principal *", lista_equipe_nomes)
+                data_inc_p = st.date_input("Data de Início do Processo", value=date.today())
+            with c_pm4:
+                prazo_p = st.date_input("Prazo Limite / Validade da Licença", value=None)
+                status_p_init = st.selectbox("Status Inicial", STATUS_OPCOES, index=2)
+
+            btn_salvar_p = st.form_submit_button("Cadastrar e Sincronizar Processo Principal")
+            
+            if btn_salvar_p:
+                if num_proc_p.strip() != "":
+                    if end_sel == "+ Adicionar Novo Endereço para este Cliente" and novo_end_input.strip() != "":
+                        cliente_obj["enderecos_empreendimentos"].append(novo_end_input.strip())
+                    
+                    end_final = novo_end_input.strip() if novo_end_input.strip() != "" else end_sel
+                    
+                    novo_id_p = max([p["id"] for p in st.session_state.processos_principais], default=0) + 1
+                    st.session
