@@ -4,14 +4,14 @@ from datetime import datetime, date
 from streamlit_gsheets import GSheetsConnection
 import os
 
-# Configuração de Layout
+# Configuração do Layout
 st.set_page_config(
     page_title="B2x Arquitetura - Gestão Processual & Financeira",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilização CSS Personalizada - B2x Arquitetura
+# Estilização CSS Personalizada - Identidade Visual B2x Arquitetura
 st.markdown("""
     <style>
     .stApp { background-color: #F4F6F8; }
@@ -25,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# CONEXÃO COM GOOGLE SHEETS E PERSISTÊNCIA EM NUVEM
+# CONEXÃO COM GOOGLE SHEETS
 # ------------------------------------------------------------------------------
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -53,7 +53,7 @@ def salvar_dados(df, aba_nome):
 # INICIALIZAÇÃO DAS BASES DE DADOS NA SESSÃO
 # ------------------------------------------------------------------------------
 
-# Equipe de Funcionários / Responsáveis
+# 1. Equipe
 if "equipe" not in st.session_state:
     st.session_state.equipe = {
         "Gabriela": "Captação / Negociação / Entrada",
@@ -65,7 +65,7 @@ if "equipe" not in st.session_state:
         "Lilian": "Projetos / Prefeitura / RRT"
     }
 
-# Lista de Órgãos
+# 2. Órgãos
 if "lista_orgaos" not in st.session_state:
     st.session_state.lista_orgaos = [
         "Prefeitura (SMDU / LICIN / SEI.RIO)",
@@ -78,7 +78,7 @@ if "lista_orgaos" not in st.session_state:
         "Patrimônio Cultural (IRPH / IPHAN)"
     ]
 
-# Base de Clientes
+# 3. Clientes
 if "clientes" not in st.session_state:
     st.session_state.clientes = [
         {
@@ -98,7 +98,7 @@ if "clientes" not in st.session_state:
         }
     ]
 
-# Base de Processos Principais (SMDU / LICIN / Prefeitura)
+# 4. Processos Principais
 if "processos_principais" not in st.session_state:
     st.session_state.processos_principais = [
         {
@@ -118,7 +118,7 @@ if "processos_principais" not in st.session_state:
         }
     ]
 
-# Base de Subprocessos
+# 5. Subprocessos
 if "subprocessos" not in st.session_state:
     st.session_state.subprocessos = [
         {
@@ -145,7 +145,7 @@ if "subprocessos" not in st.session_state:
         }
     ]
 
-# Base Financeira
+# 6. Financeiro
 if "financeiro" not in st.session_state:
     st.session_state.financeiro = [
         {
@@ -227,6 +227,8 @@ if menu == "Dashboard Executivo":
             status_counts = df_p["status"].value_counts().reset_index()
             status_counts.columns = ["Status", "Quantidade"]
             st.bar_chart(status_counts.set_index("Status"))
+        else:
+            st.info("Nenhum processo cadastrado para exibição do gráfico.")
 
     with col_g2:
         st.markdown("##### Subprocessos por Órgão Restritivo")
@@ -234,9 +236,11 @@ if menu == "Dashboard Executivo":
             sub_counts = df_sub["orgao_subprocesso"].value_counts().reset_index()
             sub_counts.columns = ["Órgão", "Quantidade"]
             st.bar_chart(sub_counts.set_index("Órgão"))
+        else:
+            st.info("Nenhum subprocesso cadastrado para exibição do gráfico.")
 
 # ------------------------------------------------------------------------------
-# 2. ENTRADA PROCESSO PRINCIPAL (LICIN / SMDU / PREFEITURA)
+# 2. ENTRADA PROCESSO PRINCIPAL
 # ------------------------------------------------------------------------------
 elif menu == "Entrada Processo Principal (LICIN/SMDU)":
     st.subheader("Cadastro de Processo Principal (SMDU / LICIN / SEI.RIO)")
@@ -253,7 +257,7 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
                 cliente_sel_nome = st.selectbox("Cliente Cadastrado *", lista_clientes_nomes)
                 cliente_obj = next(c for c in st.session_state.clientes if c["nome_razao"] == cliente_sel_nome)
                 
-                end_opcoes = cliente_obj["enderecos_empreendimentos"] + ["+ Adicionar Novo Endereço para este Cliente"]
+                end_opcoes = cliente_obj.get("enderecos_empreendimentos", []) + ["+ Adicionar Novo Endereço para este Cliente"]
                 end_sel = st.selectbox("Endereço do Empreendimento / Obra *", end_opcoes)
                 
                 if end_sel == "+ Adicionar Novo Endereço para este Cliente":
@@ -279,9 +283,480 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
             if btn_salvar_p:
                 if num_proc_p.strip() != "":
                     if end_sel == "+ Adicionar Novo Endereço para este Cliente" and novo_end_input.strip() != "":
+                        if "enderecos_empreendimentos" not in cliente_obj:
+                            cliente_obj["enderecos_empreendimentos"] = []
                         cliente_obj["enderecos_empreendimentos"].append(novo_end_input.strip())
                     
                     end_final = novo_end_input.strip() if novo_end_input.strip() != "" else end_sel
                     
                     novo_id_p = max([p["id"] for p in st.session_state.processos_principais], default=0) + 1
-                    st.session
+                    st.session_state.processos_principais.append({
+                        "id": novo_id_p,
+                        "cliente_id": cliente_obj["id"],
+                        "cliente_nome": cliente_obj["nome_razao"],
+                        "numero_processo_principal": num_proc_p,
+                        "endereco_empreendimento": end_final,
+                        "servico_contratado": servico_p,
+                        "responsavel_principal": resp_p,
+                        "status": status_p_init,
+                        "data_inicio": data_inc_p,
+                        "prazo_limite": prazo_p,
+                        "despachos": []
+                    })
+                    salvar_dados(pd.DataFrame(st.session_state.processos_principais), "Processos_Principais")
+                    st.success("Processo Principal (LICIN/SMDU) cadastrado e sincronizado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Informe o Número do Processo Principal.")
+    else:
+        st.warning("Cadastre um cliente primeiro no módulo 'Cadastro de Clientes'.")
+
+# ------------------------------------------------------------------------------
+# 3. GESTÃO DE SUBPROCESSOS
+# ------------------------------------------------------------------------------
+elif menu == "Gestão de Subprocessos":
+    st.subheader("Subprocessos & Atendimento a Restrições do Processo Principal")
+    
+    tab_sub1, tab_sub2 = st.tabs(["➕ Cadastrar Novo Subprocesso", "📋 Gerenciar Subprocessos Existentes"])
+    
+    with tab_sub1:
+        st.markdown("##### Vincular Subprocesso a um Processo Principal (SMDU/LICIN)")
+        
+        if st.session_state.processos_principais:
+            with st.form("form_novo_subprocesso"):
+                opcoes_p = [f"{p['numero_processo_principal']} — {p['cliente_nome']} ({p['endereco_empreendimento']})" for p in st.session_state.processos_principais]
+                proc_p_sel_str = st.selectbox("Selecione o Processo Principal (SMDU/LICIN) *", opcoes_p)
+                
+                idx_p_sel = opcoes_p.index(proc_p_sel_str)
+                obj_p_sel = st.session_state.processos_principais[idx_p_sel]
+                
+                c_sub1, c_sub2 = st.columns(2)
+                with c_sub1:
+                    orgao_sub = st.selectbox("Órgão do Subprocesso / Exigência *", st.session_state.lista_orgaos[1:])
+                    num_sub = st.text_input("Nº do Subprocesso / Requerimento / Prenotação", placeholder="Ex: CBMERJ-10293 / Prenotação RGI 88302")
+                    desc_exigencia = st.text_area("Descrição do Subprocesso / Objeto da Exigência *", placeholder="Descreva os detalhes da exigência...")
+
+                with c_sub2:
+                    info_relevante_input = st.text_area("Informação Relevante / Ponto de Atenção", placeholder="Ex: Exigência vinculada à aprovação do parecer técnico da GEO-RIO.")
+                    resp_sub = st.selectbox("Responsável pelo Subprocesso *", list(st.session_state.equipe.keys()))
+                    data_in_sub = st.date_input("Data de Início do Subprocesso", value=date.today())
+                    prazo_fim_sub = st.date_input("Prazo Limite para Atendimento", value=None)
+
+                btn_add_sub = st.form_submit_button("Cadastrar e Vincular Subprocesso na Nuvem")
+                
+                if btn_add_sub:
+                    novo_id_sub = max([s["id"] for s in st.session_state.subprocessos], default=0) + 1
+                    st.session_state.subprocessos.append({
+                        "id": novo_id_sub,
+                        "processo_principal_id": obj_p_sel["id"],
+                        "cliente_id": obj_p_sel["cliente_id"],
+                        "orgao_subprocesso": orgao_sub,
+                        "numero_subprocesso": num_sub if num_sub else "Aguardando Número",
+                        "descricao_exigencia": desc_exigencia,
+                        "informacao_relevante": info_relevante_input,
+                        "responsavel_sub": resp_sub,
+                        "status": "Em Tramitação",
+                        "data_inicio": data_in_sub,
+                        "prazo_fim": prazo_fim_sub,
+                        "notas_internas": [],
+                        "despachos": [],
+                        "documentos": []
+                    })
+                    salvar_dados(pd.DataFrame(st.session_state.subprocessos), "Subprocessos")
+                    st.success("Subprocesso vinculado ao Processo Principal e salvo na nuvem!")
+                    st.rerun()
+        else:
+            st.info("Nenhum Processo Principal cadastrado para vincular subprocessos.")
+
+    with tab_sub2:
+        st.markdown("##### Acompanhamento de Subprocessos por Processo Principal")
+        
+        if st.session_state.processos_principais:
+            for pm in st.session_state.processos_principais:
+                st.markdown(f"#### 🏢 Processo Principal: `{pm['numero_processo_principal']}` — {pm['cliente_nome']}")
+                st.write(f"**Empreendimento:** {pm['endereco_empreendimento']} | **Responsável:** {pm['responsavel_principal']}")
+                
+                subs_do_p = [s for s in st.session_state.subprocessos if s["processo_principal_id"] == pm["id"]]
+                
+                if subs_do_p:
+                    for sub in subs_do_p:
+                        with st.expander(f"📌 Subprocesso: {sub['orgao_subprocesso']} ({sub['numero_subprocesso']}) — Responsável: {sub['responsavel_sub']}"):
+                            
+                            if sub.get("informacao_relevante"):
+                                st.warning(f"⚠️ **Informação Relevante / Ponto de Atenção:** {sub['informacao_relevante']}")
+                            
+                            col_s1, col_s2 = st.columns(2)
+                            with col_s1:
+                                st.markdown("###### Descrição do Subprocesso")
+                                st.write(sub['descricao_exigencia'] if sub['descricao_exigencia'] else "Sem descrição cadastrada.")
+                                st.write(f"**Data de Início:** {sub['data_inicio'].strftime('%d/%m/%Y') if sub.get('data_inicio') else 'N/A'}")
+                                st.write(f"**Prazo Limite:** {sub['prazo_fim'].strftime('%d/%m/%Y') if sub.get('prazo_fim') else 'N/A'}")
+                            
+                            with col_s2:
+                                idx_st = ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"].index(sub['status']) if sub['status'] in ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"] else 0
+                                novo_st_sub = st.selectbox("Status do Subprocesso", ["Em Tramitação", "Aguardando Documento do Cliente", "Em Exigência", "Concluído / Aprovado"], index=idx_st, key=f"st_sub_{sub['id']}")
+                                if st.button("Atualizar Status", key=f"btn_st_sub_{sub['id']}"):
+                                    sub["status"] = novo_st_sub
+                                    salvar_dados(pd.DataFrame(st.session_state.subprocessos), "Subprocessos")
+                                    st.success("Status atualizado na nuvem!")
+                                    st.rerun()
+
+                            st.markdown("---")
+                            st.markdown("###### 📝 Notas e Observações Internas da Equipe")
+                            if sub.get("notas_internas"):
+                                for nota in sub["notas_internas"]:
+                                    st.info(f"**[{nota['data']}] por {nota['autor']}:** {nota['texto']}")
+                            else:
+                                st.write("Nenhuma nota cadastrada.")
+                            
+                            c_n1, c_n2 = st.columns([3, 1])
+                            with c_n1:
+                                nova_nota_txt = st.text_input("Inserir Nova Nota Interna:", key=f"txt_nota_{sub['id']}")
+                            with c_n2:
+                                autor_nota = st.selectbox("Autor:", list(st.session_state.equipe.keys()), key=f"aut_nota_{sub['id']}")
+                                
+                            if st.button("Salvar Nota Interna", key=f"btn_nota_{sub['id']}"):
+                                if nova_nota_txt.strip() != "":
+                                    if "notas_internas" not in sub:
+                                        sub["notas_internas"] = []
+                                    sub["notas_internas"].append({
+                                        "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                        "autor": autor_nota,
+                                        "texto": nova_nota_txt.strip()
+                                    })
+                                    st.success("Nota interna adicionada!")
+                                    st.rerun()
+
+                            st.markdown("---")
+                            st.markdown("###### Despachos & Histórico de Acompanhamento Oficial")
+                            if sub.get("despachos"):
+                                for d in sub["despachos"]:
+                                    st.write(f"📅 **[{d['data']}]** — {d['texto']}")
+                            
+                            novo_despacho_txt = st.text_input("Novo Despacho Oficial / Parecer:", key=f"txt_desp_{sub['id']}")
+                            if st.button("Inserir Despacho", key=f"btn_desp_{sub['id']}"):
+                                if novo_despacho_txt.strip() != "":
+                                    sub["despachos"].append({
+                                        "data": date.today().strftime("%Y-%m-%d"),
+                                        "texto": novo_despacho_txt.strip()
+                                    })
+                                    st.success("Despacho registrado!")
+                                    st.rerun()
+
+                            st.markdown("---")
+                            st.markdown("###### Documentos & Comprovantes Anexados")
+                            if sub.get("documentos"):
+                                for doc in sub["documentos"]:
+                                    st.write(f"📄 **{doc['nome']}** (Data: {doc['data']})")
+                            else:
+                                st.write("Nenhum documento anexado ainda.")
+                            
+                            up_doc_sub = st.file_uploader("Anexar Comprovante / Licença (PDF)", type=["pdf", "png", "jpg"], key=f"up_sub_{sub['id']}")
+                            if up_doc_sub:
+                                if st.button("Salvar Arquivo no Subprocesso", key=f"btn_up_sub_{sub['id']}"):
+                                    novo_id_d = len(sub.get("documentos", [])) + 1
+                                    if "documentos" not in sub:
+                                        sub["documentos"] = []
+                                    sub["documentos"].append({"id": novo_id_d, "nome": up_doc_sub.name, "data": date.today().strftime("%Y-%m-%d")})
+                                    st.success("Documento salvo!")
+                                    st.rerun()
+
+                            if st.button(f"🚨 Excluir Subprocesso", key=f"del_sub_{sub['id']}", type="primary"):
+                                st.session_state.subprocessos = [s for s in st.session_state.subprocessos if s["id"] != sub["id"]]
+                                salvar_dados(pd.DataFrame(st.session_state.subprocessos), "Subprocessos")
+                                st.success("Subprocesso removido da nuvem!")
+                                st.rerun()
+                else:
+                    st.write("Nenhum subprocesso/exigência vinculado a este Processo Principal.")
+                st.divider()
+        else:
+            st.info("Nenhum Processo Principal cadastrado no momento.")
+
+# ------------------------------------------------------------------------------
+# 4. PAINEL GERAL DE PROCESSOS
+# ------------------------------------------------------------------------------
+elif menu == "Painel Geral de Processos":
+    st.subheader("Visão Geral de Processos Principais e Seus Subprocessos")
+    
+    if st.session_state.processos_principais:
+        for pm in list(st.session_state.processos_principais):
+            with st.expander(f"PROCESSO PRINCIPAL: {pm['numero_processo_principal']} | {pm['cliente_nome']} — Resp: {pm['responsavel_principal']}"):
+                c_p1, c_p2 = st.columns(2)
+                with c_p1:
+                    st.write(f"**Empreendimento:** {pm['endereco_empreendimento']}")
+                    st.write(f"**Serviço Contratado:** {pm['servico_contratado']}")
+                with c_p2:
+                    st.write(f"**Status Principal:** `{pm['status']}`")
+                    st.write(f"**Prazo Validade:** {pm['prazo_limite'].strftime('%d/%m/%Y') if pm.get('prazo_limite') else 'N/A'}")
+
+                subs = [s for s in st.session_state.subprocessos if s["processo_principal_id"] == pm["id"]]
+                st.markdown(f"###### Subprocessos / Restrições Vinculadas ({len(subs)})")
+                for sb in subs:
+                    st.info(f"**Órgão:** {sb['orgao_subprocesso']} | **Nº:** {sb['numero_subprocesso']} | **Resp:** {sb['responsavel_sub']} | **Status:** `{sb['status']}`")
+
+                if st.button(f"🚨 Excluir Processo Principal e Subprocessos", key=f"del_pm_{pm['id']}", type="primary"):
+                    st.session_state.processos_principais = [p for p in st.session_state.processos_principais if p["id"] != pm["id"]]
+                    st.session_state.subprocessos = [s for s in st.session_state.subprocessos if s["processo_principal_id"] != pm["id"]]
+                    salvar_dados(pd.DataFrame(st.session_state.processos_principais), "Processos_Principais")
+                    salvar_dados(pd.DataFrame(st.session_state.subprocessos), "Subprocessos")
+                    st.success("Removidos da nuvem com sucesso!")
+                    st.rerun()
+    else:
+        st.info("Nenhum Processo Principal cadastrado.")
+
+# ------------------------------------------------------------------------------
+# 5. CADASTRO DE CLIENTES
+# ------------------------------------------------------------------------------
+elif menu == "Cadastro de Clientes":
+    st.subheader("Gerenciamento de Clientes e Endereços")
+    
+    tab_cli1, tab_cli2 = st.tabs(["➕ Cadastrar Novo Cliente", "🗑️ Gerenciar / Excluir Cliente"])
+    
+    with tab_cli1:
+        with st.form("form_novo_cliente"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                tipo_p = st.selectbox("Tipo de Pessoa *", ["Pessoa Jurídica", "Pessoa Física"])
+                nome_raz = st.text_input("Nome Completo ou Razão Social *")
+                cpf_cnpj = st.text_input("CPF ou CNPJ *")
+                rep_legal = st.text_input("Nome do Representante Legal (para PJ)")
+
+            with col_c2:
+                num_prop = st.text_input("Número da Proposta Comercial")
+                num_cont = st.text_input("Número do Contrato")
+                end_cli = st.text_input("Endereço Principal do Cliente")
+                end_emp_inicial = st.text_input("Endereço do Primeiro Empreendimento / Obra *")
+
+            btn_salvar_cli = st.form_submit_button("Salvar Cliente na Nuvem")
+            if btn_salvar_cli:
+                if nome_raz.strip() != "":
+                    novo_id_cli = max([c["id"] for c in st.session_state.clientes], default=0) + 1
+                    st.session_state.clientes.append({
+                        "id": novo_id_cli,
+                        "tipo_pessoa": tipo_p,
+                        "nome_razao": nome_raz,
+                        "cpf_cnpj": cpf_cnpj,
+                        "representante_legal": rep_legal,
+                        "endereco_cliente": end_cli,
+                        "enderecos_empreendimentos": [end_emp_inicial] if end_emp_inicial else [],
+                        "numero_proposta": num_prop,
+                        "numero_contrato": num_cont,
+                        "data_inicio": date.today()
+                    })
+                    salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                    st.success("Cliente cadastrado e salvo na nuvem com sucesso!")
+                    st.rerun()
+
+    with tab_cli2:
+        if st.session_state.clientes:
+            cli_excluir = st.selectbox("Selecione o Cliente para Excluir:", [c["nome_razao"] for c in st.session_state.clientes])
+            if st.button(f"🚨 Excluir Cliente '{cli_excluir}'", type="primary"):
+                st.session_state.clientes = [c for c in st.session_state.clientes if c["nome_razao"] != cli_excluir]
+                salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                st.success("Cliente removido da nuvem!")
+                st.rerun()
+        else:
+            st.info("Nenhum cliente cadastrado.")
+
+    st.divider()
+    st.markdown("##### Base Geral de Clientes")
+    df_cli_view = pd.DataFrame(st.session_state.clientes)
+    if not df_cli_view.empty:
+        st.dataframe(df_cli_view[["id", "tipo_pessoa", "nome_razao", "cpf_cnpj", "numero_proposta", "numero_contrato"]], use_container_width=True)
+
+# ------------------------------------------------------------------------------
+# 6. BUSCA INTEGRADA (LUPA 360°)
+# ------------------------------------------------------------------------------
+elif menu == "Busca Integrada (Lupa 360°)":
+    st.subheader("🔍 Consulta Consolidada por Cliente")
+    
+    nombres_clientes = [c["nome_razao"] for c in st.session_state.clientes]
+    cliente_sel_nome = st.selectbox("Selecione ou Pesquise o Nome do Cliente:", [""] + nombres_clientes)
+    
+    if cliente_sel_nome != "":
+        cliente_obj = next((c for c in st.session_state.clientes if c["nome_razao"] == cliente_sel_nome), None)
+        
+        if cliente_obj:
+            st.markdown(f"### Ficha 360°: {cliente_obj['nome_razao']}")
+            
+            c_info1, c_info2, c_info3 = st.columns(3)
+            with c_info1:
+                st.write(f"**Tipo:** {cliente_obj['tipo_pessoa']}")
+                st.write(f"**CPF/CNPJ:** {cliente_obj['cpf_cnpj']}")
+                st.write(f"**Representante:** {cliente_obj.get('representante_legal') or 'N/A'}")
+            with c_info2:
+                st.write(f"**Proposta:** {cliente_obj.get('numero_proposta') or 'N/A'}")
+                st.write(f"**Contrato:** {cliente_obj.get('numero_contrato') or 'N/A'}")
+            with c_info3:
+                st.write(f"**Endereço Comercial:** {cliente_obj.get('endereco_cliente') or 'N/A'}")
+                st.write("**Empreendimentos Cadastrados:**")
+                for end in cliente_obj.get("enderecos_empreendimentos", []):
+                    st.write(f"• {end}")
+
+            st.divider()
+            
+            procs_p_cli = [p for p in st.session_state.processos_principais if p["cliente_id"] == cliente_obj["id"]]
+            st.markdown(f"##### 📌 Processos Principais e Subprocessos ({len(procs_p_cli)})")
+            
+            for pmc in procs_p_cli:
+                st.info(f"**Processo Principal:** {pmc['numero_processo_principal']} | **Empreendimento:** {pmc['endereco_empreendimento']} | **Status:** `{pmc['status']}`")
+                subs_cli = [s for s in st.session_state.subprocessos if s["processo_principal_id"] == pmc["id"]]
+                for sc in subs_cli:
+                    st.write(f" └─ **Subprocesso ({sc['orgao_subprocesso']}):** {sc['numero_subprocesso']} — Status: `{sc['status']}`")
+
+            st.divider()
+
+            financeiro_cliente = [f for f in st.session_state.financeiro if f["cliente_id"] == cliente_obj["id"]]
+            st.markdown(f"##### 💰 Histórico Financeiro ({len(financeiro_cliente)})")
+            
+            if financeiro_cliente:
+                df_fin_cli = pd.DataFrame(financeiro_cliente)
+                st.dataframe(
+                    df_fin_cli[["tipo_documento", "numero_documento", "descricao", "valor", "vencimento", "pagador", "status_pagamento"]],
+                    use_container_width=True
+                )
+
+# ------------------------------------------------------------------------------
+# 7. MÓDULO FINANCEIRO (MARIANA)
+# ------------------------------------------------------------------------------
+elif menu == "Módulo Financeiro (Mariana)":
+    st.subheader("Módulo Financeiro - Controle de Taxas, RRT/ART e Boletos")
+    
+    tab_fin1, tab_fin2 = st.columns([2, 1])
+    
+    with tab_fin2:
+        st.markdown("##### Novo Lançamento Financeiro")
+        with st.form("form_novo_financeiro"):
+            cli_fin_nome = st.selectbox("Cliente", [c["nome_razao"] for c in st.session_state.clientes] if st.session_state.clientes else ["Nenhum"])
+            
+            cli_id_sel = next((c["id"] for c in st.session_state.clientes if c["nome_razao"] == cli_fin_nome), 1)
+            procs_p_opcoes = [p["numero_processo_principal"] for p in st.session_state.processos_principais if p["cliente_id"] == cli_id_sel]
+            
+            proc_p_fin = st.selectbox("Processo Principal Relacionado", procs_p_opcoes if procs_p_opcoes else ["Nenhum"])
+            
+            tipo_doc = st.selectbox("Tipo de Encargo", ["DARM / Taxa Municipal", "RRT (CAU)", "ART (CREA)", "Boleto Cartório / RGI", "Honorários / Outros"])
+            num_doc = st.text_input("Número do Boleto / RRT / ART / DARM")
+            desc_fin = st.text_input("Descrição da Taxa")
+            val_fin = st.number_input("Valor (R$)", min_value=0.0, value=0.0, step=10.0)
+            venc_fin = st.date_input("Data de Vencimento")
+            pagador_fin = st.selectbox("Responsável pelo Pagamento", ["B2x (A Reembolsar)", "Cliente Direto"])
+            
+            uploaded_file = st.file_uploader("Anexar Comprovante / Guia (PDF)", type=["pdf", "png", "jpg"])
+            
+            btn_add_fin = st.form_submit_button("Lançar no Financeiro na Nuvem")
+            if btn_add_fin:
+                novo_id_fin = max([f["id"] for f in st.session_state.financeiro], default=0) + 1
+                st.session_state.financeiro.append({
+                    "id": novo_id_fin,
+                    "processo_principal_id": 1,
+                    "subprocesso_id": None,
+                    "cliente_id": cli_id_sel,
+                    "tipo_documento": tipo_doc,
+                    "numero_documento": num_doc,
+                    "descricao": desc_fin,
+                    "valor": val_fin,
+                    "vencimento": venc_fin,
+                    "pagador": pagador_fin,
+                    "status_pagamento": "Pendente",
+                    "nota_fiscal_emitida": "Não",
+                    "comprovante_anexado": uploaded_file.name if uploaded_file else None
+                })
+                salvar_dados(pd.DataFrame(st.session_state.financeiro), "Financeiro")
+                st.success("Lançamento financeiro registrado na nuvem com sucesso!")
+                st.rerun()
+
+    with tab_fin1:
+        st.markdown("##### Painel de Controle de Contas e Taxas")
+        if st.session_state.financeiro:
+            for item in list(st.session_state.financeiro):
+                with st.expander(f"💰 {item['tipo_documento']} — R$ {item['valor']:,.2f} | Vencimento: {item['vencimento'].strftime('%d/%m/%Y') if item.get('vencimento') else 'N/A'} ({item['status_pagamento']})"):
+                    st.write(f"**Nº Documento:** {item['numero_documento']} | **Pagador:** {item['pagador']}")
+                    st.write(f"**Descrição:** {item['descricao']}")
+                    
+                    c_btn1, c_btn2 = st.columns(2)
+                    with c_btn1:
+                        if st.button("Marcar como Pago", key=f"btn_pago_{item['id']}"):
+                            item['status_pagamento'] = "Pago / Quitado"
+                            salvar_dados(pd.DataFrame(st.session_state.financeiro), "Financeiro")
+                            st.success("Status atualizado na nuvem!")
+                            st.rerun()
+                    with c_btn2:
+                        if st.button("🗑️ Excluir Lançamento", key=f"btn_del_fin_{item['id']}"):
+                            st.session_state.financeiro = [f for f in st.session_state.financeiro if f['id'] != item['id']]
+                            salvar_dados(pd.DataFrame(st.session_state.financeiro), "Financeiro")
+                            st.success("Lançamento excluído da nuvem!")
+                            st.rerun()
+        else:
+            st.info("Nenhum encargo financeiro registrado.")
+
+# ------------------------------------------------------------------------------
+# 8. GESTÃO DE ÓRGÃOS
+# ------------------------------------------------------------------------------
+elif menu == "Gestão de Órgãos":
+    st.subheader("Cadastro de Órgãos e Autarquias")
+    col_o1, col_o2 = st.columns([2, 1])
+    with col_o1:
+        for org in list(st.session_state.lista_orgaos):
+            c_org1, c_org2 = st.columns([4, 1])
+            with c_org1:
+                st.write(f"🏛️ **{org}**")
+            with c_org2:
+                if st.button("Excluir", key=f"del_org_{org}"):
+                    st.session_state.lista_orgaos.remove(org)
+                    st.rerun()
+    with col_o2:
+        with st.form("form_novo_orgao"):
+            novo_o = st.text_input("Nome do Órgão")
+            if st.form_submit_button("Cadastrar"):
+                if novo_o.strip():
+                    st.session_state.lista_orgaos.append(novo_o.strip())
+                    st.rerun()
+
+# ------------------------------------------------------------------------------
+# 9. GESTÃO DA EQUIPE
+# ------------------------------------------------------------------------------
+elif menu == "Gestão da Equipe":
+    st.subheader("Gerenciamento de Funcionários")
+    col_eq1, col_eq2 = st.columns([2, 1])
+    with col_eq1:
+        for nome_f, cargo_f in list(st.session_state.equipe.items()):
+            st.write(f"👤 **{nome_f}** — *{cargo_f}*")
+    with col_eq2:
+        with st.form("form_novo_f"):
+            nf = st.text_input("Nome")
+            cf = st.text_input("Função")
+            if st.form_submit_button("Cadastrar Funcionário"):
+                if nf.strip():
+                    st.session_state.equipe[nf.strip()] = cf.strip()
+                    st.rerun()
+
+# ------------------------------------------------------------------------------
+# 10. FILA INDIVIDUAL
+# ------------------------------------------------------------------------------
+elif menu == "Fila Individual":
+    st.subheader("Fila de Trabalho por Integrante")
+    user_sel = st.selectbox("Selecionar Integrante:", list(st.session_state.equipe.keys()))
+    
+    subs_meus = [s for s in st.session_state.subprocessos if s["responsavel_sub"] == user_sel]
+    principais_meus = [p for p in st.session_state.processos_principais if p["responsavel_principal"] == user_sel]
+    
+    st.markdown(f"##### Processos Principais sob Responsabilidade de {user_sel} ({len(principais_meus)})")
+    for pm in principais_meus:
+        st.info(f"**Nº Processo Principal:** {pm['numero_processo_principal']} | **Cliente:** {pm['cliente_nome']} | **Status:** {pm['status']}")
+        
+    st.markdown(f"##### Subprocessos / Exigências sob Responsabilidade de {user_sel} ({len(subs_meus)})")
+    for sm in subs_meus:
+        st.warning(f"**Órgão:** {sm['orgao_subprocesso']} | **Nº:** {sm['numero_subprocesso']} | **Exigência:** {sm['descricao_exigencia']} | **Status:** {sm['status']}")
+
+# ------------------------------------------------------------------------------
+# 11. RELATÓRIOS
+# ------------------------------------------------------------------------------
+elif menu == "Relatórios":
+    st.subheader("Exportação de Dados Consolidados")
+    df_m = pd.DataFrame(st.session_state.processos_principais)
+    if not df_m.empty:
+        st.dataframe(df_m[["numero_processo_principal", "cliente_nome", "endereco_empreendimento", "servico_contratado", "responsavel_principal", "status"]], use_container_width=True)
+        csv_data = df_m.to_csv(index=False).encode('utf-8')
+        st.download_button("Exportar Processos Principais (CSV)", data=csv_data, file_name="relatorio_processos_principais_b2x.csv", mime="text/csv")
+    else:
+        st.info("Nenhum processo cadastrado para emissão de relatório.")
