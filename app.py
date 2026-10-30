@@ -467,3 +467,44 @@ elif menu == "Entrada Processo Principal (LICIN/SMDU)":
                             "endereco_empreendimento": end_final,
                             "servico_contratado": servico_p,
                             "responsavel_principal": resp_p,
+                            "status": status_p_init,
+                            "data_inicio": data_inc_p,
+                            "prazo_limite": prazo_p,
+                            "despachos": []
+                        })
+                        salvar_dados(pd.DataFrame(st.session_state.processos_principais), "Processos_Principais")
+                        salvar_dados(pd.DataFrame(st.session_state.clientes), "Clientes")
+                        st.success("Processo Principal cadastrado e salvo com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error("Informe o Número do Processo Principal.")
+        else:
+            st.warning("Cadastre um cliente primeiro no módulo 'Cadastro de Clientes'.")
+
+    with tab_p2:
+        if st.session_state.processos_principais:
+            procs_lista = [f"{p['numero_processo_principal']} — {p['cliente_nome']}" for p in st.session_state.processos_principais]
+            proc_p_edit_sel = st.selectbox("Selecione o Processo Principal para Editar:", procs_lista, key="sel_p_edit_tab")
+            idx_p_e = procs_lista.index(proc_p_edit_sel)
+            obj_p_e = st.session_state.processos_principais[idx_p_e]
+
+            with st.form("form_edit_proc_p"):
+                c_pe1, c_pe2 = st.columns(2)
+                with c_pe1:
+                    edit_p_num = st.text_input("Nº Processo Principal", value=obj_p_e['numero_processo_principal'])
+                    edit_p_serv = st.text_input("Serviço Contratado", value=obj_p_e['servico_contratado'])
+                    edit_p_end = st.text_input("Endereço do Empreendimento", value=obj_p_e['endereco_empreendimento'])
+                with c_pe2:
+                    idx_r_p = lista_equipe_nomes.index(obj_p_e['responsavel_principal']) if obj_p_e['responsavel_principal'] in lista_equipe_nomes else 0
+                    edit_p_resp = st.selectbox("Responsável Principal", lista_equipe_nomes, index=idx_r_p)
+                    
+                    idx_st_p = STATUS_OPCOES.index(obj_p_e['status']) if obj_p_e['status'] in STATUS_OPCOES else 0
+                    edit_p_st = st.selectbox("Status do Processo", STATUS_OPCOES, index=idx_st_p)
+                    edit_p_prazo = st.date_input("Prazo Limite / Validade", value=obj_p_e.get('prazo_limite', None))
+
+                btn_salvar_edit_p = st.form_submit_button("Atualizar Processo Principal na Nuvem")
+                if btn_salvar_edit_p:
+                    obj_p_e['numero_processo_principal'] = edit_p_num
+                    obj_p_e['servico_contratado'] = edit_p_serv
+                    obj_p_e['endereco_empreendimento'] = edit_p_end
+                    obj_p_e['responsavel_principal'] = edit_p_resp
