@@ -151,4 +151,113 @@ st.title("B2x Arquitetura | Sistema de Gestão Processual Sincronizado")
 if menu == "Busca Integrada (Lupa 360°)":
     st.subheader("🔍 Consulta Consolidada por Cliente")
     clientes = get_clientes()
-    nombres_clientes = {c["id"]: c
+    nombres_clientes = {c["id"]: c["nome_razao"] for c in clientes} if clientes else {}
+    cliente_sel_id = st.selectbox("Selecione o Cliente:", [""] + list(nombres_clientes.keys()), format_func=lambda x: nombres_clientes.get(x, "Selecione..."))
+    if cliente_sel_id != "":
+        cliente_obj = get_cliente_por_id(cliente_sel_id)
+        if cliente_obj:
+            st.markdown(f"### Ficha 360°: {cliente_obj['nome_razao']}")
+            c_info1, c_info2, c_info3 = st.columns(3)
+            with c_info1:
+                st.write(f"**Tipo:** {cliente_obj.get('tipo_pessoa', 'N/A')}")
+                st.write(f"**CPF/CNPJ:** {cliente_obj.get('cpf_cnpj', 'N/A')}")
+            with c_info2:
+                st.write(f"**Proposta:** {cliente_obj.get('numero_proposta') or 'N/A'}")
+                st.write(f"**Contrato:** {cliente_obj.get('numero_contrato') or 'N/A'}")
+            with c_info3:
+                st.write(f"**Endereço Comercial:** {cliente_obj.get('endereco_cliente') or 'N/A'}")
+
+            st.divider()
+            procs = [p for p in get_processos_principais() if p.get("cliente_id") == cliente_obj["id"]]
+            st.markdown(f"##### 📌 Processos Principais ({len(procs)})")
+            if procs:
+                for pmc in procs:
+                    st.info(f"**Processo:** {pmc.get('numero_processo_principal')} | **Endereço:** {pmc.get('endereco_empreendimento')} | **Status:** `{pmc.get('status')}`")
+            else:
+                st.info("Nenhum processo cadastrado para este cliente.")
+
+elif menu == "Cadastro de Clientes":
+    st.subheader("Gerenciamento de Clientes")
+    tab1, tab2, tab3 = st.tabs(["➕ Cadastrar", "✏️ Editar", "🗑️ Excluir"])
+    with tab1:
+        with st.form("form_novo_cliente"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                tipo_p = st.selectbox("Tipo *", ["Pessoa Jurídica", "Pessoa Física"])
+                nome_raz = st.text_input("Razão Social / Nome *")
+                cpf_cnpj = st.text_input("CPF / CNPJ *")
+            with col_c2:
+                num_prop = st.text_input("Nº Proposta")
+                end_cli = st.text_input("Endereço Comercial")
+                end_emp_inicial = st.text_input("Endereço da Obra *")
+
+            if st.form_submit_button("Salvar Cliente"):
+                if nome_raz.strip():
+                    ends_json = json.dumps([end_emp_inicial] if end_emp_inicial else [])
+                    run_query("""INSERT INTO clientes (tipo_pessoa, nome_razao, cpf_cnpj, endereco_cliente, enderecos_empreendimentos, numero_proposta, data_inicio)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)""", (tipo_p, nome_raz, cpf_cnpj, end_cli, ends_json, num_prop, str(date.today())), fetchall=False)
+                    st.success("Cliente cadastrado com sucesso!")
+                    st.rerun()
+
+    with tab2:
+        clis = get_clientes()
+        if clis:
+            map_cli = {c["id"]: c["nome_razao"] for c in clis}
+            cli_edit_id = st.selectbox("Selecione o Cliente:", list(map_cli.keys()), format_func=lambda x: map_cli[x])
+            cli_edit_obj = get_cliente_por_id(cli_edit_id)
+            if cli_edit_obj:
+                with st.form("form_editar_cliente"):
+                    edit_nome = st.text_input("Nome", value=cli_edit_obj.get("nome_razao", ""))
+                    edit_cpf = st.text_input("CPF/CNPJ", value=cli_edit_obj.get("cpf_cnpj", ""))
+                    if st.form_submit_button("Atualizar"):
+                        run_query("UPDATE clientes SET nome_razao=?, cpf_cnpj=? WHERE id=?", (edit_nome, edit_cpf, cli_edit_id), fetchall=False)
+                        st.success("Atualizado!")
+                        st.rerun()
+
+    with tab3:
+        clis = get_clientes()
+        if clis:
+            map_cli_del = {c["id"]: c["nome_razao"] for c in clis}
+            cli_del_id = st.selectbox("Cliente a Excluir:", list(map_cli_del.keys()), format_func=lambda x: map_cli_del[x])
+            if st.button("Excluir Cliente", type="primary"):
+                run_query("DELETE FROM clientes WHERE id=?", (cli_del_id,), fetchall=False)
+                st.success("Excluído!")
+                st.rerun()
+
+    st.divider()
+    st.dataframe(run_df("SELECT id, tipo_pessoa, nome_razao, cpf_cnpj FROM clientes"), use_container_width=True)
+
+elif menu == "Dashboard Executivo":
+    st.subheader("Painel Geral de Acompanhamento")
+    df_p = run_df("SELECT * FROM processos_principais")
+    df_sub = run_df("SELECT * FROM subprocessos")
+    df_fin = run_df("SELECT * FROM financeiro")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Clientes Cadastrados", len(get_clientes()))
+    c2.metric("Processos Principais", len(df_p))
+    c3.metric("Subprocessos / Restrições", len(df_sub))
+    total_pendente = df_fin[df_fin["status_pagamento"] == "Pendente"]["valor"].sum() if not df_fin.empty else 0.0
+    c4.metric("Taxas Pendentes (R$)", f"R$ {total_pendente:,.2f}")
+
+    st.divider()
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown("##### Processos por Status")
+        if not df_p.empty and "status" in df_p.columns:
+            st.bar_chart(df_p["status"].value_counts())
+        else:
+            st.info("Nenhum processo cadastrado para exibir o gráfico.")
+    with col_g2:
+        st.markdown("##### Subprocessos por Órgão")
+        if not df_sub.empty and "orgao_subprocesso" in df_sub.columns:
+            st.bar_chart(df_sub["orgao_subprocesso"].value_counts())
+        else:
+            st.info("Nenhum subprocesso cadastrado para exibir o gráfico.")
+
+elif menu == "Entrada Processo Principal (LICIN/SMDU)":
+    st.subheader("Cadastro e Edição de Processos Principais")
+    tab_p1, tab_p2 = st.tabs(["➕ Cadastrar Novo Processo", "✏️ Editar Processo Existente"])
+    clis = get_clientes()
+    dict_cli = {c["id"]: c["nome_razao"] for c in clis} if clis else {}
+    lista
